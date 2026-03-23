@@ -1,0 +1,594 @@
+---
+title: "Quantitative Health Impact Assessment"
+subtitle: "Session 2 — Lecture Notes"
+author: "Dr Belen Zapata-Diomedi, IMS Epidemiology Unit"
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    toc-location: left
+    toc-title: "Contents"
+    theme: flatly
+    highlight-style: tango
+    code-fold: show
+    code-tools: true
+    number-sections: true
+    embed-resources: true
+execute:
+  echo: true
+  message: false
+  warning: false
+  fig-width: 9
+  fig-height: 6
+---
+
+------------------------------------------------------------------------
+
+# Measures of Attribution {#sec-attribution}
+
+Measures of attribution quantify how much of a disease outcome is linked to a specific exposure. They come in two flavours: **individual-level** (within exposed people) and **population-level** (across the whole population).
+
+**Example:** Air pollution (high PM2.5 = exposed; low PM2.5 = unexposed).\
+Each group has 16 people. 8 exposed die; 4 unexposed die. Total population = 32.
+
+```{r}
+#| label: attribution-measures
+
+# --- Define risks ---
+RE          <- 8 / 16   # Risk in exposed
+RU          <- 4 / 16   # Risk in unexposed
+N_exposed   <- 16
+N_unexposed <- 16
+N_total     <- N_exposed + N_unexposed
+deaths_total <- 8 + 4
+
+R_population <- deaths_total / N_total  # Risk in whole population
+
+# --- Exposed measures ---
+RR <- RE / RU
+AR <- RE - RU
+AF <- (RE - RU) / RE
+
+# --- Population measures ---
+PAR <- R_population - RU
+PAF <- (R_population - RU) / R_population
+
+# --- Results ---
+cat("Relative Risk (RR):", RR, "\n")
+cat("Attributable Risk (AR):", AR, "\n")
+cat("Attributable Fraction (AF):", round(AF, 3), "\n")
+cat("Population Attributable Risk (PAR):", PAR, "\n")
+cat("Population Attributable Fraction (PAF):", round(PAF, 3), "\n")
+```
+
+**Key interpretations:**
+
+-   **AF = 0.50** — 50% of cases *among the exposed* are due to PM2.5.
+-   **PAF = 0.33** — 33% of cases *in the whole population* are attributable to PM2.5 exposure.
+-   PAF \< AF because only half the population is exposed.
+
+::: callout-tip
+## Why does this matter?
+
+PAF is always ≤ AF. The more of the population that is exposed, the closer the two measures become. This distinction is crucial when translating risk-factor evidence into public health action.
+:::
+
+::: {.callout-note collapse="true"}
+## Reference
+
+Murray CJ et al. (2003). Comparative quantification of health risks. *Population Health Metrics*.
+:::
+
+------------------------------------------------------------------------
+
+# PIF — Binary Exposure {#sec-pif-binary}
+
+The **Population Impact Fraction (PIF)** generalises PAF. While PAF compares current exposure to *zero* exposure, the PIF compares current exposure to any counterfactual — including realistic, policy-relevant scenarios.
+
+$$
+\text{PIF} = \frac{p(RR - 1) - p^*(RR - 1)}{p(RR - 1) + 1}
+$$
+
+where $p$ = baseline prevalence, $p^*$ = counterfactual prevalence, $RR$ = relative risk of exposed vs unexposed.
+
+**Example:** Physical inactivity and all-cause mortality.\
+Prevalence of inactivity reduced from 50% to 40% by an intervention.
+
+```{r}
+#| label: pif-binary
+
+# --- Inputs ---
+p    <- 0.50   # Prevalence of inactivity at baseline
+p_cf <- 0.40   # Prevalence of inactivity at counterfactual (after intervention)
+RR   <- 1.27   # Relative risk inactive vs active (all-cause mortality)
+
+# --- PIF formula (Barendregt & Veerman, 2010) ---
+PIF <- (p * (RR - 1) - p_cf * (RR - 1)) / (p * (RR - 1) + 1)
+
+cat("PIF =", round(PIF, 4), "\n")
+cat("PIF (%) =", round(PIF * 100, 2), "%\n")
+```
+
+**Interpretation:** 2.38% of all-cause mortality could be prevented if prevalence of inactivity decreased from 50% to 40%.
+
+::: callout-note
+## PIF vs PAF
+
+When $p^* = 0$ (eliminate exposure entirely), the PIF formula collapses to the standard PAF formula. PIF is the general form; PAF is the special case.
+:::
+
+::: {.callout-note collapse="true"}
+## Reference
+
+Barendregt JJ & Veerman JL. (2010). Categorical versus continuous risk factors and the calculation of potential impact fractions. *J Epidemiol Community Health*, 64(3):209.
+:::
+
+------------------------------------------------------------------------
+
+# PIF — Categorical Exposure {#sec-pif-categorical}
+
+When an exposure has more than two levels, the PIF is calculated using **weighted sums** of the relative risks across categories:
+
+$$
+\text{PIF} = \frac{\sum_i p_i \cdot RR_i \;-\; \sum_i p^*_i \cdot RR_i}{\sum_i p_i \cdot RR_i}
+$$
+
+where $p_i$ and $p^*_i$ are the baseline and counterfactual proportions in category $i$, and $RR_i$ is the relative risk for that category.
+
+**Example:** Physical activity categories and ischaemic heart disease (IHD), males aged 30–34.\
+Two counterfactuals are computed:
+
+1.  **Scenario (PIF):** Inactive population shifts toward more active categories — a realistic policy target.\
+2.  **Burden of disease (PAF):** Everyone reaches the highest activity level (TMREL — theoretical minimum risk exposure level).
+
+```{r}
+#| label: pif-categorical
+
+# ── Inputs ──────────────────────────────────────────────────────────────────────
+RR_cat <- c(Inactive = 1.97, Low = 1.66, Moderate = 1.15, High = 1.00)
+
+# Baseline distribution
+P_base <- c(Inactive = 0.17, Low = 0.24, Moderate = 0.31, High = 0.28)
+
+# Counterfactual 1: Intervention scenario (inactive shifts to low/moderate)
+P_cf_scenario <- c(Inactive = 0.10, Low = 0.27, Moderate = 0.35, High = 0.28)
+
+# Counterfactual 2: Burden of disease — everyone highly active (TMREL)
+P_cf_tmrel    <- c(Inactive = 0.00, Low = 0.00, Moderate = 0.00, High = 1.00)
+
+# Baseline IHD deaths (males 30–34)
+deaths_baseline <- 28
+
+# ── Verify inputs sum to 1 ───────────────────────────────────────────────────────
+stopifnot(abs(sum(P_base)        - 1) < 1e-6)
+stopifnot(abs(sum(P_cf_scenario) - 1) < 1e-6)
+stopifnot(abs(sum(P_cf_tmrel)    - 1) < 1e-6)
+
+# ── Weighted sums ────────────────────────────────────────────────────────────────
+sum_base     <- sum(P_base        * RR_cat)
+sum_scenario <- sum(P_cf_scenario * RR_cat)
+sum_tmrel    <- sum(P_cf_tmrel    * RR_cat)   # = 1.00 (everyone at RR = 1)
+
+# ── PIF 1: Scenario (intervention shift) ────────────────────────────────────────
+PIF_scenario <- (sum_base - sum_scenario) / sum_base
+
+cat("── PIF 1: Intervention scenario ──────────────────────\n")
+cat("Sum baseline:      ", round(sum_base,     4), "\n")
+cat("Sum counterfactual:", round(sum_scenario, 4), "\n")
+cat("PIF =", round(PIF_scenario, 4), "\n")
+cat("PIF (%) =", round(PIF_scenario * 100, 2), "%\n\n")
+
+# ── PIF 2 (= PAF): Everyone highly active (TMREL) ───────────────────────────────
+PAF_tmrel <- (sum_base - sum_tmrel) / sum_base
+
+cat("── PIF 2 / PAF: Everyone highly active (TMREL) ───────\n")
+cat("Sum baseline:      ", round(sum_base,  4), "\n")
+cat("Sum counterfactual:", round(sum_tmrel, 4), "\n")
+cat("PAF =", round(PAF_tmrel, 4), "\n")
+cat("PAF (%) =", round(PAF_tmrel * 100, 2), "%\n")
+```
+
+::: callout-tip
+## Interpretations
+
+**Scenario (PIF = 3.07%):** If inactive people decrease from 17% to 10% — redistributing into low and moderately active categories — 3.07% of IHD burden would be prevented. This is a realistic policy scenario.
+
+**Burden (PAF = 27%):** If everyone were highly active, 27% of IHD deaths would not occur. This is the theoretical maximum preventable fraction — useful for establishing public health importance, not as a policy target.
+:::
+
+::: {.callout-note collapse="true"}
+## References
+
+Zapata-Diomedi B et al. (2017). *PLoS ONE*, 12(10).\
+Danaei G et al. (2009). *PLoS Medicine*, 6(4).
+:::
+
+------------------------------------------------------------------------
+
+# PIF — Continuous Exposure {#sec-pif-continuous}
+
+When exposure is measured on a continuous scale, we replace the discrete summation with integration over the exposure distribution:
+
+$$
+\text{PIF} = \frac{\int_a^b RR(x)\,P(x)\,dx \;-\; \int_a^b RR(x)\,P^*(x)\,dx}
+                  {\int_a^b RR(x)\,P(x)\,dx}
+$$
+
+where $P(x)$ is the baseline exposure distribution, $P^*(x)$ the counterfactual, $RR(x)$ the relative risk function, and $[a, b]$ the integration bounds. As we will see below, **the choice of integration bounds matters**.
+
+**Example:** BMI and ischaemic heart disease — Kenya, males 40–44.\
+Mean BMI shifts from 23.58 to 22.5 kg/m². No excess risk below 22.5. RR per 5 kg/m² = 1.599 (GBD 2019).
+
+## Input Parameters and Setup
+
+```{r}
+#| label: continuous-parameters
+
+# ── Exposure distribution ──────────────────────────────────────────────────────
+mean_base <- 23.58   # Baseline mean BMI (kg/m²)
+mean_cf   <- 22.50   # Counterfactual mean BMI (kg/m²)
+sd        <- 4.50    # Standard deviation (same in both scenarios)
+
+# ── Risk function ──────────────────────────────────────────────────────────────
+RR_per_5  <- 1.599   # RR per 5-unit increase in BMI above threshold (GBD 2019)
+threshold <- 22.50   # BMI below which there is NO excess risk (RR = 1)
+
+# ── Integration limits ─────────────────────────────────────────────────────────
+lower <- 10
+upper <- 60
+```
+
+### Convert to log-normal parameters
+
+BMI is modelled as log-normally distributed. A log-normal with mean $\mu$ and SD $\sigma$ (on the original scale) has log-scale parameters:
+
+$$
+\sigma_{\log} = \sqrt{\ln\!\left(1 + \frac{\sigma^2}{\mu^2}\right)}, \qquad
+\mu_{\log}    = \ln\!\left(\frac{\mu^2}{\sqrt{\sigma^2 + \mu^2}}\right)
+$$
+
+```{r}
+#| label: lognormal-params
+
+sigma_log   <- sqrt(log(1 + (sd^2 / mean_base^2)))
+mu_log_base <- log((mean_base^2) / sqrt(sd^2 + mean_base^2))
+mu_log_cf   <- log((mean_cf^2)   / sqrt(sd^2 + mean_cf^2))
+
+cat(sprintf("Baseline       — mu_log: %.4f,  sigma_log: %.4f\n", mu_log_base, sigma_log))
+cat(sprintf("Counterfactual — mu_log: %.4f,  sigma_log: %.4f\n", mu_log_cf,   sigma_log))
+```
+
+::: callout-note
+Only the mean shifts; `sigma_log` is identical in both scenarios — a parallel location shift of the log-normal distribution.
+:::
+
+### Relative risk function and distributions
+
+```{r}
+#| label: risk-and-pdfs
+
+beta <- log(RR_per_5) / 5
+
+# RR = 1 at or below the threshold; increases exponentially above it
+RR_bmi <- function(x) {
+  ifelse(x <= threshold, 1, exp(beta * (x - threshold)))
+}
+
+P      <- function(x) dlnorm(x, meanlog = mu_log_base, sdlog = sigma_log)
+P_star <- function(x) dlnorm(x, meanlog = mu_log_cf,   sdlog = sigma_log)
+```
+
+## Approach A vs Approach B {#sec-approaches}
+
+::: panel-tabset
+### Approach A — Full bounds \[10, 60\]
+
+Integrate over the **entire BMI range**. The RR function handles the threshold internally — it returns 1 below 22.5, so the lower tail is included in both integrals but contributes no excess risk. The shaded region shows the full area under each curve.
+
+```{r}
+#| label: pif-approach-a
+
+risk_base_A <- integrate(function(x) RR_bmi(x) * P(x),      lower, upper)$value
+risk_cf_A   <- integrate(function(x) RR_bmi(x) * P_star(x), lower, upper)$value
+PIF_A       <- (risk_base_A - risk_cf_A) / risk_base_A
+
+cat(sprintf("Baseline expected risk:   %.4f\n", risk_base_A))
+cat(sprintf("CF expected risk:         %.4f\n", risk_cf_A))
+cat(sprintf("PIF (Approach A):         %.4f  (%.1f%%)\n", PIF_A, PIF_A * 100))
+```
+
+```{r}
+#| label: plot-approach-a
+#| fig-cap: "Approach A: integration over the full distribution [10, 60]. Shading shows the full area under each PDF. The RR curve rises only above the threshold."
+
+x_seq     <- seq(lower, upper, length.out = 500)
+pdf_base  <- P(x_seq)
+pdf_cf    <- P_star(x_seq)
+rr_vals   <- RR_bmi(x_seq)
+pdf_max   <- max(pdf_base, pdf_cf)
+rr_max    <- max(rr_vals)
+rr_scaled <- (rr_vals - 1) / (rr_max - 1) * pdf_max
+
+par(mar = c(5, 4.5, 4, 4.5))
+plot(x_seq, pdf_base, type = "l", lwd = 2.5, col = "#2563EB",
+     ylim = c(0, pdf_max * 1.12),
+     xlab = "BMI (kg/m²)", ylab = "Probability Density",
+     main = "Approach A: Full Integration Bounds [10, 60]", las = 1)
+
+polygon(c(x_seq, rev(x_seq)), c(pdf_base, rep(0, length(x_seq))),
+        col = adjustcolor("#2563EB", alpha.f = 0.12), border = NA)
+polygon(c(x_seq, rev(x_seq)), c(pdf_cf, rep(0, length(x_seq))),
+        col = adjustcolor("#DC2626", alpha.f = 0.10), border = NA)
+
+lines(x_seq, pdf_cf,    lwd = 2.5, col = "#DC2626", lty = 2)
+lines(x_seq, rr_scaled, lwd = 2.5, col = "#D97706")
+
+abline(v = threshold, col = "gray40", lty = 3, lwd = 1.5)
+text(threshold + 0.3, pdf_max * 1.02,
+     paste0("Threshold\n", threshold, " kg/m²"),
+     col = "gray40", cex = 0.75, adj = 0)
+
+rr_ticks_real   <- c(1, 1.5, 2, 3, 4, 5)
+rr_ticks_scaled <- (rr_ticks_real - 1) / (rr_max - 1) * pdf_max
+axis(4, at = rr_ticks_scaled, labels = rr_ticks_real,
+     las = 1, col.axis = "#D97706", col = "#D97706")
+mtext("Relative Risk (RR)", side = 4, line = 3.2, col = "#D97706", cex = 0.9)
+
+legend("topright",
+       legend = c("Baseline PDF", "Counterfactual PDF",
+                  "Relative Risk (RR)", "Threshold"),
+       col = c("#2563EB", "#DC2626", "#D97706", "gray40"),
+       lty = c(1, 2, 1, 3), lwd = c(2.5, 2.5, 2.5, 1.5),
+       bty = "n", cex = 0.85)
+par(mar = c(5, 4, 4, 2) + 0.1)
+```
+
+### Approach B — Paper bounds \[22.5, 60\]
+
+This matches **Wanjau et al. (2023)**. The lower integration bound is set to $a = 22.5$ for *both* numerator and denominator. By restricting both integrals to $[22.5, 60]$, this is a **conditional PIF**: the denominator represents expected risk only among people with BMI \> 22.5.
+
+$$
+\text{PIF} = \frac{\int_{22.5}^{60} RR(x)\,P(x)\,dx \;-\; \int_{22.5}^{60} RR(x)\,P^*(x)\,dx}
+                  {\int_{22.5}^{60} RR(x)\,P(x)\,dx}
+$$
+
+```{r}
+#| label: pif-approach-b
+
+a <- threshold   # 22.5
+b <- upper       # 60
+
+risk_base_B <- integrate(function(x) RR_bmi(x) * P(x),      a, b)$value
+risk_cf_B   <- integrate(function(x) RR_bmi(x) * P_star(x), a, b)$value
+PIF_B       <- (risk_base_B - risk_cf_B) / risk_base_B
+
+cat(sprintf("Baseline expected risk (above 22.5): %.4f\n", risk_base_B))
+cat(sprintf("CF expected risk (above 22.5):       %.4f\n", risk_cf_B))
+cat(sprintf("PIF (Approach B / Paper):            %.4f  (%.1f%%)\n",
+            PIF_B, PIF_B * 100))
+```
+
+```{r}
+#| label: plot-approach-b
+#| fig-cap: "Approach B: integration restricted to [22.5, 60]. Shading shows only the at-risk portion of each PDF — the region that enters the PIF calculation."
+
+x_full  <- seq(lower, upper, length.out = 500)
+x_above <- seq(threshold, upper, length.out = 500)
+
+pdf_base_full  <- P(x_full)
+pdf_cf_full    <- P_star(x_full)
+pdf_base_above <- P(x_above)
+pdf_cf_above   <- P_star(x_above)
+rr_vals_full   <- RR_bmi(x_full)
+
+pdf_max   <- max(pdf_base_full, pdf_cf_full)
+rr_max    <- max(rr_vals_full)
+rr_scaled <- (rr_vals_full - 1) / (rr_max - 1) * pdf_max
+
+par(mar = c(5, 4.5, 4, 4.5))
+plot(x_full, pdf_base_full, type = "l", lwd = 2.5, col = "#2563EB",
+     ylim = c(0, pdf_max * 1.12),
+     xlab = "BMI (kg/m²)", ylab = "Probability Density",
+     main = "Approach B: Paper Integration Bounds [22.5, 60]", las = 1)
+
+polygon(c(x_above, rev(x_above)),
+        c(pdf_base_above, rep(0, length(x_above))),
+        col = adjustcolor("#2563EB", alpha.f = 0.18), border = NA)
+polygon(c(x_above, rev(x_above)),
+        c(pdf_cf_above, rep(0, length(x_above))),
+        col = adjustcolor("#DC2626", alpha.f = 0.14), border = NA)
+
+lines(x_full, pdf_cf_full,  lwd = 2.5, col = "#DC2626", lty = 2)
+lines(x_full, rr_scaled,    lwd = 2.5, col = "#D97706")
+
+abline(v = threshold, col = "gray40", lty = 3, lwd = 1.5)
+text(threshold + 0.3, pdf_max * 1.02,
+     paste0("Threshold\n", threshold, " kg/m²"),
+     col = "gray40", cex = 0.75, adj = 0)
+
+rr_ticks_real   <- c(1, 1.5, 2, 3, 4, 5)
+rr_ticks_scaled <- (rr_ticks_real - 1) / (rr_max - 1) * pdf_max
+axis(4, at = rr_ticks_scaled, labels = rr_ticks_real,
+     las = 1, col.axis = "#D97706", col = "#D97706")
+mtext("Relative Risk (RR)", side = 4, line = 3.2, col = "#D97706", cex = 0.9)
+
+legend("topright",
+       legend = c("Baseline PDF", "Counterfactual PDF",
+                  "Relative Risk (RR)", "Threshold"),
+       col = c("#2563EB", "#DC2626", "#D97706", "gray40"),
+       lty = c(1, 2, 1, 3), lwd = c(2.5, 2.5, 2.5, 1.5),
+       bty = "n", cex = 0.85)
+par(mar = c(5, 4, 4, 2) + 0.1)
+```
+:::
+
+## Comparing the Two Approaches
+
+```{r}
+#| label: comparison-table
+#| echo: false
+
+comp <- data.frame(
+  Approach             = c("A: Full bounds [10, 60]",
+                            "B: Paper bounds [22.5, 60]"),
+  `Integration limits` = c("[10, 60]", "[22.5, 60]"),
+  `Population this PIF refers to` = c("Whole population",
+                                       "Population with BMI > 22.5 only"),
+  `Baseline risk`      = c(round(risk_base_A, 4), round(risk_base_B, 4)),
+  `CF risk`            = c(round(risk_cf_A, 4),   round(risk_cf_B, 4)),
+  `PIF (%)`            = c(round(PIF_A * 100, 1), round(PIF_B * 100, 1)),
+  `Aligned with Wanjau 2023` = c("No", "Yes"),
+  check.names = FALSE
+)
+knitr::kable(comp, align = "llccccc")
+```
+
+### Why do they give different PIFs?
+
+The **denominators differ**. Approach A's denominator includes the below-threshold mass (contributing RR = 1 but from different distributions P and P*), making it larger. Approach B excludes this mass — it represents expected risk* only among those above 22.5\* — making it smaller. The same absolute risk reduction expressed as a fraction of a smaller baseline yields a **higher PIF** in Approach B.
+
+::: callout-tip
+## What each PIF actually means
+
+-   **Approach A PIF (`r round(PIF_A * 100, 1)`%):** of the expected BMI-related disease risk across the *whole population*, this fraction is averted under the counterfactual.
+
+-   **Approach B PIF (`r round(PIF_B * 100, 1)`%):** of the expected BMI-related disease risk among the *subpopulation with BMI \> 22.5*, this fraction is averted. This is a **conditional PIF** — it does not apply to the whole population, only to the at-risk portion.
+
+Both are valid framings. Approach B is the one used in Wanjau et al. (2023), where the research question concerns the disease burden attributable to elevated BMI — a quantity by definition restricted to those above the threshold of no excess risk.
+:::
+
+::: {.callout-note collapse="true"}
+## Reference
+
+Wanjau MN et al. (2023). *Cost Effectiveness and Resource Allocation*, 21(1).
+:::
+
+------------------------------------------------------------------------
+
+# Multiple Risk Factors {#sec-multiple}
+
+When multiple **independent** risk factors contribute to the same outcome, we **multiply the remaining fractions** rather than summing PIFs. Summing is incorrect and can exceed 1 (100%).
+
+$$
+\text{PIF}_{\text{joint}} = 1 - \prod_{i}(1 - \text{PIF}_i)
+$$
+
+```{r}
+#| label: multiple-risk-factors
+
+# --- Individual PIFs (binary formula) -------------------------------------------
+Ppa       <- 0.3;  RRpa       <- 2
+Ppm       <- 0.5;  RRpm       <- 2
+Pdiabetes <- 0.5;  RRdiabetes <- 3
+
+PIFpa       <- Ppa       * (RRpa       - 1) / (Ppa       * (RRpa       - 1) + 1)
+PIFpm       <- Ppm       * (RRpm       - 1) / (Ppm       * (RRpm       - 1) + 1)
+PIFdiabetes <- Pdiabetes * (RRdiabetes - 1) / (Pdiabetes * (RRdiabetes - 1) + 1)
+
+# --- CORRECT: multiplicative combination ----------------------------------------
+pifs      <- c(PIFpa, PIFpm, PIFdiabetes)
+PIF_joint <- 1 - prod(1 - pifs)
+cat("Joint PIF (correct):", round(PIF_joint, 4), "\n")
+cat("Joint PIF (%):", round(PIF_joint * 100, 2), "%\n\n")
+
+# --- INCORRECT: naive sum -------------------------------------------------------
+cat("Sum (INCORRECT — can exceed 1):", round(sum(pifs), 4), "\n")
+```
+
+::: callout-warning
+## Key assumption
+
+Risk factors must be **independent** — they do not overlap in causal pathways and their combined effect is multiplicative on the remaining risk. If risk factors share causal pathways (e.g., obesity and diabetes), this approach will overestimate the joint PIF.
+:::
+
+------------------------------------------------------------------------
+
+# Comparative Risk Assessment {#sec-cra}
+
+CRA translates a PIF into an actual number of deaths, cases, or years of life lost (YLL) by applying it to baseline health data:
+
+$$
+\text{Attributable / preventable burden} = \text{Baseline burden} \times \text{PIF}
+$$
+
+**This section carries forward objects from @sec-pif-categorical** (physical activity and IHD, 28 baseline deaths, males 30–34). No new inputs are needed.
+
+```{r}
+#| label: cra
+
+# ── Objects carried forward from Section 3 ──────────────────────────────────────
+# PIF_scenario  = 0.0307  (intervention: inactive 17% → 10%)
+# PAF_tmrel     = 0.2700  (burden: everyone highly active)
+# deaths_baseline = 28
+
+# ── Apply PIF/PAF to baseline deaths ────────────────────────────────────────────
+deaths_prevented    <- round(deaths_baseline * PIF_scenario, 1)
+deaths_attributable <- round(deaths_baseline * PAF_tmrel, 1)
+
+cat("── Burden of Disease ──────────────────────────────────────────────\n")
+cat("Counterfactual : Everyone highly active (TMREL)\n")
+cat("PAF            :", round(PAF_tmrel * 100, 1), "%\n")
+cat("Attributable   :", deaths_attributable,
+    "IHD deaths/yr attributable to physical inactivity\n\n")
+
+cat("── Scenario Analysis ──────────────────────────────────────────────\n")
+cat("Counterfactual : Inactive 17% → 10%; shift to low/moderate active\n")
+cat("PIF            :", round(PIF_scenario * 100, 1), "%\n")
+cat("Prevented      :", deaths_prevented,
+    "IHD deaths/yr prevented by the intervention\n\n")
+
+cat("── The gap ────────────────────────────────────────────────────────\n")
+cat("Intervention captures",
+    round(deaths_prevented / deaths_attributable * 100, 1),
+    "% of the total attributable burden\n")
+cat("(", deaths_prevented, "of", deaths_attributable, "attributable deaths)\n")
+```
+
+::: callout-tip
+## Interpretations
+
+**Burden of Disease (PAF = 27%):** Approximately 8 IHD deaths per year are attributable to physical inactivity in this population. This is the theoretical ceiling — comparing current levels to the ideal of everyone being highly active. It is not a realistic policy target, but it establishes the public health importance of the risk factor.
+
+**Scenario Analysis (PIF = 3.07%):** A realistic intervention shifting inactive people toward more active categories would prevent approximately **1 IHD death per year**. The modest effect reflects that: (i) the distributional shift is small; (ii) people shift to adjacent categories, not all the way to highly active; and (iii) a large share of the burden sits with those already partially active.
+:::
+
+::: callout-important
+## The gap is the key teaching point
+
+The intervention captures only \~11% of the maximum preventable burden. This motivates why sustained, population-wide activity shifts — rather than small nudges — are needed to make a meaningful dent in attributable burden.
+:::
+
+testing difference
+
+::: {.callout-note collapse="true"}
+## References
+
+Zapata-Diomedi B et al. (2017). *PLoS ONE*, 12(10).\
+Danaei G et al. (2009). *PLoS Medicine*, 6(4).\
+Murray CJ et al. (2003). *Population Health Metrics*.
+:::
+
+------------------------------------------------------------------------
+
+# Key References {#sec-references .unnumbered}
+
+-   Barendregt JJ & Veerman JL. (2010). Categorical versus continuous risk factors and the calculation of potential impact fractions. *Journal of Epidemiology and Community Health*, 64(3):209. <https://doi.org/10.1136/jech.2009.090274>
+
+-   Murray CJ, Ezzati M, Lopez AD et al. (2003). Comparative quantification of health risks: Conceptual framework and methodological issues. *Population Health Metrics*. <http://www.pophealthmetrics.com/content/1/1/1>
+
+-   Zapata-Diomedi B et al. (2017). A shift from motorised travel to active transport: What are the potential health gains for an Australian city? *PLoS ONE*, 12(10). <https://doi.org/10.1371/journal.pone.0184799>
+
+-   Danaei G et al. (2009). The preventable causes of death in the United States. *PLoS Medicine*, 6(4). <https://doi.org/10.1371/journal.pmed.1000058>
+
+-   Wanjau MN et al. (2023). Health and economic impact of obesity interventions in Kenya. *Cost Effectiveness and Resource Allocation*, 21(1). <https://doi.org/10.1186/s12962-023-00467-3>
+
+-   Mizdrak A, Tatah L, Mueller N, Shaw C, Woodcock J. (2023). Assessing health impacts of changes in active transport. *Journal of Transport & Health*, 33, 101702.
+
+-   Preston SH, Heuveline P, Guillot M. (2001). *Demography: Measuring and Modeling Population Processes*. Blackwell.
+
+-   Global Burden of Disease Results Tool: <https://vizhub.healthdata.org/gbd-results/>
+
+-   drpa R package: <https://meta-analyses.github.io/drpa/drpa.html>
+
+-   Interactive dose-response tool: <https://shiny.mrc-epid.cam.ac.uk/meta-analyses-physical-activity/>

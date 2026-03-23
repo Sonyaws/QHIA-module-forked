@@ -1,0 +1,281 @@
+---
+title: "Practical: Smoking-Attributable IHD Deaths in England, 2012–2023"
+author: "Student name:"
+date: "Date:"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    theme: flatly
+    highlight: tango
+    number_sections: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+---
+
+# Introduction
+
+This practical has two questions:
+
+> **Question 1.** What is the burden of smoking-attributable IHD mortality for males and
+> females aged 50–59 in England, from 2012 to 2023?
+
+> **Question 2.** How many IHD deaths could have been averted under a scenario of
+> accelerated smoking decline?
+
+You will use the **Population Impact Fraction (PIF)** formula for a binary exposure
+(smoker vs non-smoker):
+
+$$PIF = \frac{\sum_i p_i RR_i \;-\; \sum_i p_i^* RR_i}{\sum_i p_i RR_i}$$
+
+With smoking as a binary exposure, in R this is one line:
+
+```r
+p      <- c(p_s, 1 - p_s)   # observed: smoker, non-smoker proportions
+p_star <- c(0,   1)          # counterfactual: no one smokes
+RR     <- c(RR_s, 1)         # relative risks (non-smoker = 1)
+
+PIF <- (sum(p * RR) - sum(p_star * RR)) / sum(p * RR)
+```
+
+All data are provided below — no external files are needed.
+
+---
+
+# Data
+
+## Smoking prevalence
+
+Current cigarette smokers (%) in 50–59 year olds, England.  
+Source: ONS Opinions and Lifestyle Survey, 2024.
+
+```{r data-smoking}
+smoking <- data.frame(
+  year       = 2012:2023,
+  prev_men   = c(21.9, 19.2, 18.4, 17.1, 15.9, 19.1, 14.7, 19.7, 16.3, 15.9, 17.7, 15.4),
+  prev_women = c(17.4, 18.0, 17.3, 15.2, 13.2, 14.9, 15.9, 14.0, 15.6, 13.3, 12.2, 12.6)
+)
+
+smoking$p_men   <- smoking$prev_men   / 100
+smoking$p_women <- smoking$prev_women / 100
+
+smoking[, c("year", "prev_men", "prev_women")]
+```
+
+## IHD deaths
+
+IHD deaths, England, ages 50–59 (50–54 + 55–59 summed), by sex.  
+Source: GBD 2023 Results Tool (IHME).
+
+```{r data-ihd}
+ihd <- data.frame(
+  year         = 2012:2023,
+  deaths_men   = c(2884, 2914, 2855, 2915, 2948, 3033, 3131, 3173, 3477, 3568, 3632, 3882),
+  deaths_women = c( 683,  713,  694,  724,  731,  740,  761,  774,  814,  853,  900,  959)
+)
+
+ihd
+```
+
+## Relative risks
+
+Current smoker vs non-smoker, IHD, ages 45–59.  
+Source: Ezzati et al., *Circulation* (2003), CPS-II reanalysis.
+
+```{r data-rr}
+RR_men   <- 3.04
+RR_women <- 3.78
+```
+
+---
+
+# Question 1 — Burden of smoking-attributable IHD mortality
+
+## Step 1: Calculate the PIF for each year
+
+Complete the blanks (`___`) in the code below. The loop runs once per year. For each
+year, build the observed distributions `p_men_obs` and `p_women_obs`, then apply the
+PIF formula in one line for each sex.
+
+```{r q1-pif}
+p_star <- c(0, 1)   # counterfactual: no one smokes
+
+results <- data.frame(
+  year       = 2012:2023,
+  PIF_men    = NA_real_,
+  PIF_women  = NA_real_,
+  attr_men   = NA_real_,
+  attr_women = NA_real_
+)
+
+for (i in 1:nrow(results)) {
+
+  # Observed distributions: c(smoker proportion, non-smoker proportion)
+  p_men_obs   <- c(smoking$p_men[i],   1 - smoking$p_men[i])
+  p_women_obs <- c(smoking$p_women[i], 1 - smoking$p_women[i])
+
+  # RR vectors: c(RR for smokers, RR for non-smokers)
+  RR_men_vec   <- c(RR_men,   1)
+  RR_women_vec <- c(RR_women, 1)
+
+  # PIF — one line each
+  results$PIF_men[i]   <- (sum(___ * ___) - sum(p_star * ___)) / sum(___ * ___)
+  results$PIF_women[i] <- (sum(___ * ___) - sum(p_star * ___)) / sum(___ * ___)
+
+  # Attributable deaths
+  results$attr_men[i]   <- results$PIF_men[i]   * ihd$deaths_men[i]
+  results$attr_women[i] <- results$PIF_women[i] * ihd$deaths_women[i]
+}
+
+results$PIF_men    <- round(results$PIF_men   * 100, 1)
+results$PIF_women  <- round(results$PIF_women * 100, 1)
+results$attr_men   <- round(results$attr_men)
+results$attr_women <- round(results$attr_women)
+results$attr_total <- results$attr_men + results$attr_women
+
+results
+```
+
+## Step 2: Plot attributable deaths over time
+
+```{r q1-plot, fig.width=8, fig.height=5}
+plot(results$year, results$attr_men,
+     type = "b", pch = 16, lwd = 2, col = "#1E3A5F",
+     ylim = c(0, 1400),
+     xlab = "Year",
+     ylab = "Smoking-attributable IHD deaths",
+     main = "Smoking-attributable IHD deaths, ages 50–59, England")
+
+lines(results$year, results$attr_women,
+      type = "b", pch = 17, lwd = 2, lty = 2, col = "#2A9D8F")
+
+lines(results$year, results$attr_total,
+      type = "b", pch = 15, lwd = 2, lty = 3, col = "#E76F51")
+
+legend("topleft",
+       legend = c("Men", "Women", "Total"),
+       col    = c("#1E3A5F", "#2A9D8F", "#E76F51"),
+       lwd = 2, lty = c(1, 2, 3), pch = c(16, 17, 15), bty = "n")
+```
+
+> **Q1.1** Smoking prevalence fell between 2012 and 2023 for both sexes. Yet total
+> attributable IHD deaths increased. Explain why.
+
+> **Q1.2** Women have a higher RR (3.78) than men (3.04), yet fewer attributable deaths
+> in every year. What drives this difference?
+
+> **Q1.3** Calculate the cumulative total of attributable IHD deaths across all 12 years.
+> What does this figure represent, and what assumptions does it rest on?
+
+```{r q1-cumulative}
+cat("Cumulative attributable IHD deaths, 2012–2023:\n")
+cat("  Men:   ", sum(results$attr_men),   "\n")
+cat("  Women: ", sum(results$attr_women), "\n")
+cat("  Total: ", sum(results$attr_total), "\n")
+```
+
+---
+
+# Question 2 — Averted deaths under accelerated decline
+
+## The scenario
+
+Smoking prevalence in England has declined since 2012, but what if it had declined
+*twice as fast*? The scenario sets the **counterfactual 2023 prevalence** to half the
+**observed 2012 prevalence**:
+
+| | Observed 2012 | Observed 2023 | **Scenario 2023** |
+|---|---|---|---|
+| Men | 21.9% | 15.4% | **10.95%** |
+| Women | 17.4% | 12.6% | **8.70%** |
+
+In the PIF formula: **$p$** remains the *observed 2023 distribution*; **$p^*$** becomes
+the *scenario distribution*. The PIF then measures the fraction of deaths that would have
+been averted by this faster decline.
+
+## Step 3: Calculate averted deaths for 2023
+
+```{r q2-scenario}
+# Observed 2023 prevalences
+p_men_2023   <- smoking$p_men[smoking$year   == 2023]
+p_women_2023 <- smoking$p_women[smoking$year == 2023]
+
+# Scenario counterfactual: half of 2012 prevalence
+p_men_cf   <- smoking$p_men[smoking$year   == 2012] / 2
+p_women_cf <- smoking$p_women[smoking$year == 2012] / 2
+
+# 2023 IHD deaths
+deaths_men_2023   <- ihd$deaths_men[ihd$year   == 2023]
+deaths_women_2023 <- ihd$deaths_women[ihd$year == 2023]
+
+# Observed distributions (2023 actual)
+p_obs_men   <- c(p_men_2023,   1 - p_men_2023)
+p_obs_women <- c(p_women_2023, 1 - p_women_2023)
+
+# Scenario counterfactual distributions
+p_cf_men   <- c(p_men_cf,   1 - p_men_cf)
+p_cf_women <- c(p_women_cf, 1 - p_women_cf)
+
+RR_men_vec   <- c(RR_men,   1)
+RR_women_vec <- c(RR_women, 1)
+
+# PIF comparing 2023 observed → scenario counterfactual
+PIF_men_scenario   <- (sum(p_obs_men   * ___) - sum(___ * ___)) / sum(p_obs_men   * ___)
+PIF_women_scenario <- (sum(p_obs_women * ___) - sum(___ * ___)) / sum(p_obs_women * ___)
+
+attr_men_scenario   <- round(PIF_men_scenario   * deaths_men_2023)
+attr_women_scenario <- round(PIF_women_scenario * deaths_women_2023)
+
+# Compare to observed attributable deaths in 2023
+attr_men_2023   <- results$attr_men[results$year   == 2023]
+attr_women_2023 <- results$attr_women[results$year == 2023]
+
+averted_men   <- attr_men_2023   - attr_men_scenario
+averted_women <- attr_women_2023 - attr_women_scenario
+
+cat("--- 2023 results ---\n")
+cat("Attributable deaths (observed prevalence) — Men:", attr_men_2023,     " Women:", attr_women_2023,     "\n")
+cat("Attributable deaths (scenario prevalence) — Men:", attr_men_scenario, " Women:", attr_women_scenario, "\n")
+cat("Deaths averted                            — Men:", averted_men,       " Women:", averted_women,       "\n")
+cat("Total averted:", averted_men + averted_women, "\n")
+```
+
+## Step 4: Plot observed vs scenario
+
+```{r q2-plot, fig.width=7, fig.height=5}
+heights <- c(attr_men_2023, attr_men_scenario, attr_women_2023, attr_women_scenario)
+cols    <- c("#1E3A5F", "#7BA7C7", "#2A9D8F", "#8FD4CA")
+labels  <- c("Men\n(observed)", "Men\n(scenario)", "Women\n(observed)", "Women\n(scenario)")
+
+bp <- barplot(heights,
+              names.arg = labels,
+              col = cols, border = NA,
+              ylab = "Smoking-attributable IHD deaths",
+              main = "Observed vs. accelerated-decline scenario, 2023\nEngland, ages 50–59",
+              ylim = c(0, max(heights) * 1.25))
+
+text(x = bp, y = heights + 15, labels = heights, cex = 0.9)
+```
+
+> **Q2.1** How many IHD deaths would have been averted in 2023 if smoking had declined
+> twice as fast since 2012? Express this as a percentage of total IHD deaths in this age
+> group in 2023.
+
+> **Q2.2** In the scenario, $p^*$ is set to the counterfactual prevalence. Those who
+> "stop smoking" under the scenario are treated as equivalent to non-smokers (RR = 1).
+> Is this realistic? In which direction does it bias the averted-deaths estimate?
+
+> **Q2.3** Name one other factor that changed between 2012 and 2023 that this analysis
+> does not account for.
+
+---
+
+# References
+
+1. Office for National Statistics. *Adult Smoking Habits in England, 2024.* Newport: ONS; 2025.
+2. GBD 2023 Causes of Death Collaborators. *Global Burden of Disease Study 2023.* Seattle: IHME; 2024.
+3. Ezzati M, Lopez AD, Rodgers A, Vander Hoorn S, Murray CJL. Selected major risk factors and global and regional burden of disease. *Lancet.* 2002;360(9343):1347–1360.
