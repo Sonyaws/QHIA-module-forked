@@ -20,7 +20,7 @@ format:
 
 # Learning objectives:
 
-In-depth look at the scenario generation with a better understanding of travel behaviour
+This practical provides an in-depth examination of scenario generation, with a focus on developing a comprehensive understanding of travel behaviour.
 
 ```{r setup}
 #| echo: false
@@ -70,7 +70,7 @@ mode_colours <- c("pedestrian" = '#99d8c9',
 
 ## Trip distribution by mode
 
-Before we get into scenario creation, let's have a close look at trips distribution in the travel behaviour
+Prior to scenario creation, this section examines the distribution of trips across different modes within the baseline travel behaviour.
 
 ```{r}
 #| warning: false
@@ -115,7 +115,7 @@ trip_dist |>
 
 ```
 
-This shows that `bus` share is the highest with `r round(trip_dist$bus * 100, 1)`(%) and `other` with the lowest share `r round(trip_dist$other * 100, 1)`(%).
+The bus mode exhibits the highest share at `r round(trip_dist$bus * 100, 1)`(%), while the other category demonstrates the lowest share at `r round(trip_dist$other * 100, 1)`(%).
 
 ## Trip distribution by distance categories
 
@@ -129,7 +129,7 @@ We have defined three distance categories, which are:
 
 3.  Long trips with `6+ km` distance
 
-They have been drawn from domain knowledge as well as from empirical distance distribution captured in many trip diary datasets. Do note that they are not fixed and can be user-defined in the parameters sheet. In this exercise, let's see how distances for `bus`, `car`, `cycle` and `pedestrian` trips are distributed in these distance categories.
+These categories are derived from domain expertise and empirical distance distributions observed in travel diary datasets. It should be noted that these thresholds are not fixed and can be user-defined in the parameters sheet. The following analysis examines how distances for `bus`, `car`, `cycle` and `pedestrian` trips are distributed across these categories.
 
 ```{r}
  plotly::ggplotly(ggplot(trips |> 
@@ -208,13 +208,13 @@ trips_tbl |>
   
 ```
 
-## How does it work under the hood?
+## Mechanistic Overview
 
 ### Example of `5%` increase in cycling mode
 
 Assume that there are only two distance bands `A` and `B` and that `80%` of all `cycling` trips lie in distance band `A` and the remaining `20%` in distance band `B`. In terms of overall trips, assume that `60%` of all trips are in distance band `A` and `40%` in distance band `B`.
 
-Let's assume we want to increase the `cycling` mode share by `5%` of all trips. Then, we need to convert:
+To increase the `cycling` mode share by `5%` of all trips, the following conversions are required:
 
 -   `5% x 80% / 60% = 6.67%` of non-cycling trips in distance band `A` to cycling trips and
 
@@ -222,19 +222,19 @@ Let's assume we want to increase the `cycling` mode share by `5%` of all trips. 
 
 -   Overall, this leads to an increase of `(5% x 80% / 60%) x 60%` + `(5% x 20% / 40%) * 40%` = `5%` of cycling trips, whilst preserving the cycling mode shares of `80%` in distance band `A` and `20%` in distance band `B` and preserving the total mode shares of `60%` in distance band `A` and `40%` in distance band `B`. The total number of trips is also preserved.
 
-# Create a pedestrian scenario
+# Create a Pedestrian Scenario
 
-In this exercise, let's create a scenario, independent of the `ithimr` package. Now that we have a good understanding of trip modes and their distances, let's modify some of the trips and calculate impact of it on physical activity. We will consider these:
+This exercise demonstrates scenario creation independent of the `ithimr` package. Having established a comprehensive understanding of trip modes and their associated distances, this section modifies selected trips and quantifies the resulting impact on physical activity. The analysis focuses on:
 
 -   the shortest distance category with distances less than `2` km
 
 -   Create a new scenario with target mode as `pedestrian` trips
 
--   Do note that since `pedestrian` trips in the baseline account for the majority of trips already, as we saw in the previous exercise, so we shouldn't expect a substantial change in the PA volume.
+-   It should be noted that `pedestrian` trips already constitute the majority of trips in the baseline scenario; consequently, as observed in the preceding exercise, only a modest change in PA volume is anticipated.
 
 ## Create a copy of the `baseline` scenario
 
-Using the `trips` dataset, let's create a copy of the `baseline` scenario. Fill in the scenario name below:
+Using the `trips` dataset, a copy of the `baseline` scenario is created as follows:
 
 ```{r}
 # get baseline trips for 15-69 year old from the io object
@@ -248,7 +248,7 @@ trips_ped_scen <- trips_baseline
 
 ## Now change trips to `pedestrian` mode
 
-Change all trips under `2 km` using the `trip_distance_cat` of `0-2km` to `pedestrian` mode. Fill in the distance category and the mode of interest.
+All trips within the `0-2km` distance category are converted to `pedestrian` mode. The distance category and target mode are specified below.
 
 ```{r}
 
@@ -354,7 +354,7 @@ mmets_pp <- travel_mmets |>
 
 ## Combine travel and background PA volume
 
-Similar to the previous exercises, let's sum travel and background PA volumes together
+Following the approach established in prior exercises, travel and background PA volumes are aggregated
 
 ```{r}
 
@@ -365,7 +365,7 @@ mmets_pp_total <- mmets_pp |>
 
 ## Change the structure to `wide` format
 
-Change the structure of the dataset from `long` to `wide` format. Use `names(mmets_pp_total)` on your console to find out which variable name stores the total mMET hours per week.
+The dataset structure is transformed from `long` to `wide` format. The variable storing total mMET hours per week can be identified using `names(mmets_pp_total)` in the console.
 
 ```{r}
 # Read in the total mMET hours per week and change its orientation from long to wide format
@@ -378,9 +378,9 @@ mmets_pp_total_wide <- mmets_pp_total |>
 head(mmets_pp_total_wide)
 ```
 
-## Plot distribution of the two scenarios
+## Distribution of Scenarios
 
-Plot the distribution of both scenario and see where the change has happened.
+The cumulative distribution of both scenarios is presented below to illustrate where changes have occurred.
 
 ```{r}
 # Use ggplot create a CDF plot of both baseline and pedestrian scenarios
