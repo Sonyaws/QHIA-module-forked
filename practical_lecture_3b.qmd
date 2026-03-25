@@ -1,5 +1,5 @@
 ---
-title: "Practicals: session 15th"
+title: "Practicals: lecture 2"
 subtitle: "Behaviours, exposures, PIF and CRA"
 author: "Ali Abbas"
 engine: knitr
@@ -36,7 +36,7 @@ library(plotly)
 library(ithimr)
 library(DT)
 # Read io
-io <- readRDS(here("results/multi_city/io.rds"))
+io <- readRDS(here("data/lecture_3/ithim_io/io.rds"))
 # Read trips from the io object and remove ghost trips (with participant_id = 0)
 trips <- io$bogota$trip_scen_sets |> filter(participant_id > 0)
 # Set palette for gt table

@@ -1,5 +1,5 @@
 ---
-title: "Practicals: session 13th"
+title: "Practicals: lecture 2"
 subtitle: "Creating scenarios"
 author: "Ali Abbas"
 engine: knitr
@@ -32,7 +32,7 @@ library(here)
 library(gt)
 library(plotly)
 # Read io
-io <- readRDS(here("results/multi_city/io.rds"))
+io <- readRDS(here("data/lecture_3/ithim_io/io.rds"))
 # Read trips from the io object and remove ghost trips (with participant_id = 0)
 trips <- io$bogota$trip_scen_sets |> filter(participant_id > 0)
 # Set palette for gt table
@@ -248,8 +248,7 @@ trips_ped_scen <- trips_baseline
 
 ## Now change trips to `pedestrian` mode
 
-Change all trips under `2 km` using the `trip_distance_cat` of `0-2km` to `pedestrian` mode.
-Fill in the distance category and the mode of interest.
+Change all trips under `2 km` using the `trip_distance_cat` of `0-2km` to `pedestrian` mode. Fill in the distance category and the mode of interest.
 
 ```{r}
 
@@ -381,7 +380,7 @@ head(mmets_pp_total_wide)
 
 ## Plot distribution of the two scenarios
 
-Plot the distribution of both scenario and see where the change has happened. 
+Plot the distribution of both scenario and see where the change has happened.
 
 ```{r}
 # Use ggplot create a CDF plot of both baseline and pedestrian scenarios
