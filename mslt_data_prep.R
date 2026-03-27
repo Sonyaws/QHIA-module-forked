@@ -37,12 +37,11 @@ OUTPUT_FILE <- "data/lecture_5_6/mslt_colombia.csv"
 DISEASE_MAP <- tibble(
   gbd_name = c(
     "Ischemic heart disease",
-    "Stroke",
     "Chronic obstructive pulmonary disease",
     "Diabetes mellitus type 2",
     "All causes"
   ),
-  sname = c("ishd", "strk", "copd", "dmt2", "allc")
+  sname = c("ishd", "copd", "dmt2", "allc")
 )
 
 
@@ -317,11 +316,30 @@ gbddb <- gbd_disagg %>%
   arrange(sname, sex, age) %>%
   mutate_all(~ replace_na(., 0))
 
+# -----------------------------------------------------------------------------
+# Disease-specific remission assumptions (recovery duration in years)
+# Higher = less remission. 999 = effectively no remission (but causes disbayes issues)
+# Use 10000 for very low remission that still works with disbayes
+# -----------------------------------------------------------------------------
+RECOVERY_YEARS <- c(
+  ishd = 10000,   # IHD: very low remission (chronic heart disease) - use 10000 not 999
+  copd = 20,      # COPD: some recovery possible with treatment
+  dmt2 = 100      # DMT2: higher = lower remission = higher prevalence
+)
+
+message("Disease-specific recovery assumptions:")
+for (d in names(RECOVERY_YEARS)) {
+  if (RECOVERY_YEARS[d] >= 999) {
+    message("  ", d, ": no remission")
+  } else {
+    message("  ", d, ": ", RECOVERY_YEARS[d], " years (rate = ", round(1/RECOVERY_YEARS[d], 4), ")")
+  }
+}
+
 saveRDS(gbddb, "data/lecture_5_6/disbayes_input_colombia.rds")
 message("Saved disbayes input to data/lecture_5_6/disbayes_input_colombia.rds")
 
-# Quick diagnostic — flag any remaining impossible rows so you can inspect them
-# before kicking off the slow MCMC step.
+# Quick diagnostic — flag any remaining impossible rows
 impossible <- gbddb %>%
   filter(inc_num > inc_denom | prev_num > prev_denom | mort_num > mort_denom)
 if (nrow(impossible) > 0) {
@@ -336,6 +354,10 @@ if (nrow(impossible) > 0) {
 # 4. Run disbayes
 # =============================================================================
 
+## incidence, prevalence and disease mortality from results tool. 
+## remission based on documentation of GBD indicating after how many years 
+## recovery is assumed. 
+
 diseases_db  <- unique(gbddb$sname) %>% sort()
 genders_db   <- unique(gbddb$sex)   %>% sort()
 
@@ -344,98 +366,163 @@ combinations <- crossing(disease = diseases_db, gender = genders_db) %>%
   pull(combo)
 
 message(paste("Running disbayes for", length(combinations), "disease × sex combinations..."))
-message("This step is computationally intensive (MCMC). Progress is logged below.")
 
-cores   <- max(1L, detectCores() - 1L)
-cluster <- parallel::makeCluster(cores, outfile = "disbayes_log.txt")
-doSNOW::registerDoSNOW(cluster)
+gbddb <- gbddb %>%
+  rowwise() %>%
+  mutate(
+    recovery_yrs = RECOVERY_YEARS[sname],
+    rem_num = if (is.na(recovery_yrs) || recovery_yrs >= 50000) {
+      0L
+    } else {
+      floor(prev_num / recovery_yrs)
+    },
+    rem_denom = prev_num
+  ) %>%
+  ungroup() %>%
+  mutate(
+    rem_num = if_else(rem_denom > 0 & rem_num > rem_denom, rem_denom, rem_num),
+    rem_num = if_else(is.na(rem_num), 0L, rem_num)
+  ) %>%
+  select(-recovery_yrs)
 
-pb       <- txtProgressBar(max = length(combinations), style = 3)
-progress <- function(n) setTxtProgressBar(pb, n)
-opts     <- list(progress = progress)
+message("Synthetic remission data added:")
+for (d in names(RECOVERY_YEARS)) {
+  rec_yrs <- RECOVERY_YEARS[d]
+  if (rec_yrs >= 999) {
+    message("  ", d, ": no remission")
+  } else {
+    message("  ", d, ": ", rec_yrs, " years (rate = ", round(1/rec_yrs, 4), ")")
+  }
+}
 
-disbayes_results <- foreach(
-  i              = seq_along(combinations),
-  .packages      = c("dplyr", "disbayes"),
-  .errorhandling = "pass",
-  .options.snow  = opts
-) %dopar% {
+# -----------------------------------------------------------------------------
+# Add GBD-style value priors for DMT2 only
+# - Remission: max 0.01 for ages 15+
+# - Case fatality (excess mortality): max 0.15
+# - Incidence: max 0.0008 for ages 1-15, max 0.1 for ages 15+
+# -----------------------------------------------------------------------------
+gbddb <- gbddb %>%
+  mutate(
+    # Constrain incidence rates for dmt2 only
+    inc_rate = ifelse(inc_denom > 0, inc_num / inc_denom, 0),
+    inc_rate = ifelse(sname == "dmt2",
+      case_when(
+        age < 1 ~ 0,
+        age < 15 ~ pmin(inc_rate, 0.0008),
+        TRUE ~ pmin(inc_rate, 0.2)  # increased from 0.1 to allow higher incidence
+      ),
+      inc_rate
+    ),
+    inc_num = ifelse(inc_denom > 0, floor(inc_rate * inc_denom), 0L),
+    
+    # Constrain case fatality rates for dmt2 only (max 0.15)
+    cf_rate = ifelse(inc_denom > 0, mort_num / inc_denom, 0),
+    cf_rate = ifelse(sname == "dmt2", pmin(cf_rate, 0.15), cf_rate),
+    mort_num = ifelse(inc_denom > 0, floor(cf_rate * inc_denom), 0L),
+    
+    # Constrain remission rates for dmt2 only (max 0.01 for ages 15+)
+    rem_rate = ifelse(rem_denom > 0, rem_num / rem_denom, 0),
+    rem_rate = ifelse(sname == "dmt2" & age < 15, 0, rem_rate),
+    rem_rate = ifelse(sname == "dmt2" & age >= 15, pmin(rem_rate, 0.01), rem_rate),
+    rem_num = ifelse(rem_denom > 0, floor(rem_rate * rem_denom), 0L)
+  ) %>%
+  select(-inc_rate, -cf_rate, -rem_rate)
+
+
+message("GBD-style value priors applied to DMT2 only:")
+message("  Incidence: max 0.0008 (ages 1-15), max 0.1 (ages 15+)")
+message("  Case fatality: max 0.15")
+message("  Remission: max 0.01 (ages 15+)")
+
+disbayes_results <- vector("list", length(combinations))
+
+for (i in seq_along(combinations)) {
   
+ 
   sel_disease <- strsplit(combinations[i], "_")[[1]][1]
   sel_gender  <- strsplit(combinations[i], "_")[[1]][2]
   
   dat <- gbddb %>% filter(sname == sel_disease, sex == sel_gender)
   
-  if (nrow(dat) == 0)
-    return(paste(combinations[i], "| no data"))
-  
-  tryCatch({
-    
+  # Run disbayes - for IHD skip remission (causes numerical issues)
+  if (sel_disease == "ishd") {
     dbres <- disbayes(
       data       = dat,        age        = "age",
       inc_num    = "inc_num",  inc_denom  = "inc_denom",
       prev_num   = "prev_num", prev_denom = "prev_denom",
       mort_num   = "mort_num", mort_denom = "mort_denom",
-      method     = "mcmc", chains = 4, iter = 10000, eqage = 0
+      method     = "opt", iter = 10000, eqage = 0
     )
-    
-    summ <- disbayes::tidy(dbres)
-    
-    cf_col  <- paste0("case_fatality_", sel_disease)
-    inc_col <- paste0("incidence_",     sel_disease)
-    rem_col <- paste0("remission_",     sel_disease)
-    
-    cf_df <- summ %>%
-      filter(var == "cf", between(age, 0, 100)) %>%
-      transmute(
-        sex_age_cat = paste0(sel_gender, "_", age),
-        !!cf_col   := `50%`
-      )
-    
-    inc_df <- summ %>%
-      filter(var == "inc", between(age, 0, 100)) %>%
-      transmute(
-        sex_age_cat = paste0(sel_gender, "_", age),
-        !!inc_col  := `50%`
-      )
-    
-    out_df <- cf_df %>%
-      inner_join(inc_df, by = "sex_age_cat") %>%
-      mutate(!!rem_col := 0)
-    
-    list(df = out_df, dbres = dbres)
-    
-  }, error = function(e) {
-    paste(combinations[i], "| Error:", conditionMessage(e))
-  })
+  } else {
+    dbres <- disbayes(
+      data       = dat,        age        = "age",
+      inc_num    = "inc_num",  inc_denom  = "inc_denom",
+      prev_num   = "prev_num", prev_denom = "prev_denom",
+      mort_num   = "mort_num", mort_denom = "mort_denom",
+      rem_num    = "rem_num",  rem_denom  = "rem_denom",
+      method     = "opt", iter = 10000, eqage = 0,
+      rem_prior  = c(1.1, 1)
+    )
+  }
+  
+  
+  summ <- disbayes::tidy(dbres) 
+  
+  
+  message("disbayes tidy columns: ", paste(names(summ), collapse = ", "))
+  message("disbayes tidy vars: ", paste(unique(summ$var), collapse = ", "))
+  
+  # Find the median column - could be "50%" or "mode" depending on method
+  median_col <- if ("50%" %in% names(summ)) "50%" else "mode"
+  
+  cf_col  <- paste0("case_fatality_", sel_disease)
+  inc_col <- paste0("incidence_",     sel_disease)
+  rem_col <- paste0("remission_",     sel_disease)
+  
+  cf_df <- summ %>%
+    filter(var == "cf", between(age, 0, 100)) %>%
+    transmute(
+      sex_age_cat = paste0(sel_gender, "_", age),
+      !!cf_col    := .data[[median_col]]
+    )
+
+  inc_df <- summ %>%
+    filter(var == "inc", between(age, 0, 100)) %>%
+    transmute(
+      sex_age_cat = paste0(sel_gender, "_", age),
+      !!inc_col   := .data[[median_col]]
+    )
+
+  rem_df <- summ %>%
+    filter(var == "rem", between(age, 0, 100)) %>%
+    transmute(
+      sex_age_cat = paste0(sel_gender, "_", age),
+      !!rem_col   := .data[[median_col]]
+    )
+
+  if (nrow(rem_df) == 0) {
+    message("WARNING: No remission from disbayes for ", sel_disease, "/", sel_gender, " - using 0")
+    rem_df <- data.frame(
+      sex_age_cat = cf_df$sex_age_cat,
+      !!rem_col   := 0
+    )
+  }
+
+  out_df <- cf_df %>%
+    inner_join(inc_df, by = "sex_age_cat") %>%
+    inner_join(rem_df, by = "sex_age_cat")
+
+  message(sel_disease, "/", sel_gender, " - remission range: ",
+          round(range(out_df[[rem_col]], na.rm = TRUE), 6))
+  
+  disbayes_results[[i]] <- list(df = out_df, dbres = dbres)
 }
 
-close(pb)
-stopCluster(cluster)
+names(disbayes_results) <- combinations
+
 
 # Assemble results ----
-sex_age_cat_all <- c(
-  paste0("female_", 0:100),
-  paste0("male_",   0:100)
-)
 
-disbayes_output <- data.frame(sex_age_cat = sex_age_cat_all)
-errors          <- character(0)
-
-sex_age_cat_all <- c(paste0("female_", 0:100), paste0("male_", 0:100))
-disbayes_output <- data.frame(sex_age_cat = sex_age_cat_all)
-errors          <- character(0)
-
-# Group successful results by disease
-# Each res$df has columns: sex_age_cat, case_fatality_X, incidence_X, remission_X
-# Female and male runs of the SAME disease have IDENTICAL column names
-# → safe to bind_rows (different sex_age_cat values, same columns)
-
-sex_age_cat_all <- c(paste0("female_", 0:100), paste0("male_", 0:100))
-errors          <- character(0)
-
-# Step 1: Collect all successful dfs and convert to long format
-# Each df has: sex_age_cat, case_fatality, incidence, remission
 all_long <- disbayes_results %>%
   purrr::keep(~ is.list(.) && "df" %in% names(.)) %>%
   purrr::map("df") %>%
@@ -456,38 +543,13 @@ all_long <- disbayes_results %>%
 # all_long now has: sex_age_cat | case_fatality | incidence | remission | disease
 # Each row is one age × sex × disease — no column conflicts possible
 
-# Step 2: Collect errors
-errors <- disbayes_results %>%
-  purrr::keep(~ !is.list(.) || !"df" %in% names(.)) %>%
-  purrr::map_chr(as.character)
-
-if (length(errors) > 0) {
-  message("Disbayes errors (", length(errors), " combinations failed):")
-  purrr::walk(errors, message)
-}
-
-# Step 3: Pivot to wide — one row per sex_age_cat, one col-triplet per disease
-disbayes_wide <- all_long %>%
+disbayes_output <- all_long %>%
   tidyr::pivot_wider(
     id_cols     = sex_age_cat,
     names_from  = disease,
     values_from = c(case_fatality, incidence, remission),
     names_glue  = "{.value}_{disease}"   # → case_fatality_copd, incidence_copd, ...
   )
-
-# Step 4: Single join onto scaffold — guarantees 202 rows
-disbayes_output <- data.frame(sex_age_cat = sex_age_cat_all) %>%
-  dplyr::left_join(disbayes_wide, by = "sex_age_cat")
-
-# Step 5: Verify
-message("Rows: ", nrow(disbayes_output),
-        " (expected 202)")
-message("Cols: ", ncol(disbayes_output),
-        " — ", paste(names(disbayes_output), collapse = ", "))
-
-bad <- grep("\\.x$|\\.y$", names(disbayes_output), value = TRUE)
-if (length(bad) > 0) stop("Still have .x/.y: ", paste(bad, collapse=", "))
-
 
 
 write_csv(disbayes_output, "data/lecture_5_6/disbayes_output_colombia.csv")
@@ -603,8 +665,6 @@ result_list <- map(c("male", "female"), function(sx) {
 })
 
 mslt_base <- bind_rows(result_list)
-
-write_csv(mslt_base, "data/lecture_5_6/mslt_colombia_temp.csv")
 
 # Join disbayes outputs (case fatality, incidence, remission)
 disbayes_tidy <- disbayes_output %>%

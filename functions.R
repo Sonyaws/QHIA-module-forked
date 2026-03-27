@@ -97,11 +97,11 @@ calculate_pif <- function(pop_ref, pop_scen) {
       n            = n(),
       sum_rr_ref  = sum(rr_ref,  na.rm = TRUE),
       sum_rr_scen = sum(rr_scen, na.rm = TRUE),
-      pif_pa       = (sum_rr_ref - sum_rr_scen) / sum_rr_ref,
+      pif       = (sum_rr_ref - sum_rr_scen) / sum_rr_ref,
       .groups = "drop"
     ) |>
     # Guard against NaN / Inf (e.g. if mean_rr_ref is 0 or NA)
-    mutate(pif_pa = replace(pif_pa, !is.finite(pif_pa), 0))
+    mutate(pif = replace(pif, !is.finite(pif), 0))
   
   return(list(pif_table = pif_table, pop_combined = pop_combined))
 }
@@ -110,15 +110,22 @@ calculate_pif <- function(pop_ref, pop_scen) {
 
 ### Function to create a life table for a age and sex cohort
 
-RunLifeTable <- function(in_data, in_sex, in_mid_age, mx_trend = NA, scenario = 0) {
-  # in_data    = mslt_general
-  # in_sex     = "male" or "female"
-  # in_mid_age = cohort entry age (e.g. 17, 22, ..., 97)
-  # mx_trend   = annual % change in mortality across simulation years
-  #              NA  → no trend, use static mx
-  #              2   → 2% reduction per year  (improving survival)
-  #             -1   → 1% increase per year   (worsening mortality)
-  # scenario   = one-off proportional reduction in mx (e.g. PIF); 0 = no change
+RunLifeTable <- function(in_data, in_sex, in_mid_age, mx_trend = NA,
+                         mx_trend_years = NA, scenario = 0) {
+  # in_data         = mslt_general
+  # in_sex          = "male" or "female"
+  # in_mid_age      = cohort entry age (e.g. 17, 22, ..., 97)
+  # mx_trend        = annual % change in mortality across simulation years
+  #                   NA  → no trend, use static mx
+  #                   2   → 2% reduction per year  (improving survival)
+  #                  -1   → 1% increase per year   (worsening mortality)
+  # mx_trend_years  = number of years to apply mx_trend (NA = no cap, trend
+  #                   applies for entire simulation)
+  # scenario        = one-off proportional reduction in mx. Can be:
+  #                   - scalar: same PIF for all ages (e.g. 0.05)
+  #                   - data.frame: age-specific PIFs with columns:
+  #                     sex, age_cat, and a PIF column (e.g. pif_pa).
+  #                     The cohort uses PIF for their current age/sex as they age.
   
   # ── Base life table data ─────────────────────────────────────────────────────
   lf_df <- in_data %>%
@@ -130,15 +137,42 @@ RunLifeTable <- function(in_data, in_sex, in_mid_age, mx_trend = NA, scenario = 
   # ── Apply mortality trend (compounding across simulation years) ───────────────
   # Year 1 (cohort entry) is unchanged; each subsequent year compounds.
   # Positive mx_trend = reduction; negative = increase.
+  # mx_trend_years caps how many years the trend applies (NA = no cap).
   if (!is.na(mx_trend)) {
-    trend_multiplier <- (1 - mx_trend / 100) ^ (seq_len(num_row) - 1)
+    t_seq <- seq_len(num_row) - 1
+    if (!is.na(mx_trend_years)) {
+      t_seq <- pmin(t_seq, mx_trend_years) #  caps the time index so the trend stops increasing after that many years.
+    }
+    trend_multiplier <- (1 - mx_trend / 100) ^ t_seq
     lf_df <- lf_df %>%
       mutate(mx = mx * trend_multiplier)
   }
   
   # ── Apply scenario reduction (e.g. from PIF) on top of any trend ─────────────
-  lf_df <- lf_df %>%
-    mutate(mx = mx * (1 - scenario))
+  # scenario can be:
+  #   - scalar: single PIF applied to all ages (e.g. 0.05)
+  #   - data.frame: age-specific PIFs with columns sex, age_cat, and a PIF column
+  if (is.data.frame(scenario)) {
+    # lf_df <- lt_ref
+    pif_df <- scenario
+    pif_col <- setdiff(names(pif_df), c("sex", "age_cat", "cause", "n", "sum_rr_ref", "sum_rr_scen"))
+    if (length(pif_col) == 0) {
+      stop("scenario data.frame must contain a PIF column (e.g. pif_pa)")
+    }
+    pif_col <- pif_col[1]
+    lf_df <- lf_df %>%
+      mutate(age_cat = paste0(floor(age / 5) * 5, "-", floor(age / 5) * 5 + 4)) %>%
+      left_join(
+        pif_df %>% filter(sex == in_sex) %>% select(age_cat, pif = all_of(pif_col)),
+        by = "age_cat"
+      ) %>%
+      mutate(pif = as.numeric(ifelse(is.na(pif), 0, pif))) %>%
+      mutate(mx = mx * (1 - pif)) %>%
+      select(-age_cat)
+  } else {
+    lf_df <- lf_df %>%
+      mutate(mx = mx * (1 - scenario))
+  }
   
   # ── Life table calculations ──────────────────────────────────────────────────
   
@@ -162,14 +196,14 @@ RunLifeTable <- function(in_data, in_sex, in_mid_age, mx_trend = NA, scenario = 
   # person-years lived
   Lx <- rep(0, num_row)
   for (i in 1:(num_row - 1))
-    Lx[i] <- (lx[i] + lx[i + 1]) / 2
-  # terminal age: guard against mx == 0
-  Lx[num_row] <- lx[num_row] * qx[num_row]
+    Lx[i] = (lx[i] + lx[i + 1]) / 2
+  # terminal age: use GitHub formula
+  Lx[num_row] = lx[num_row] / lf_df$mx[num_row]
   
   # life expectancy — guard against lx == 0
   ex <- rep(0, num_row)
   for (i in 1:num_row)
-    ex[i] <- ifelse(lx[i] > 0, sum(Lx[i:num_row]) / lx[i], 0)
+    ex[i] = sum(Lx[i:num_row]) / lx[i]
   
   # health-adjusted person-years
   Lwx <- Lx * (1 - lf_df$pyld_rate)
@@ -177,7 +211,7 @@ RunLifeTable <- function(in_data, in_sex, in_mid_age, mx_trend = NA, scenario = 
   # health-adjusted life expectancy
   ewx <- rep(0, num_row)
   for (i in 1:num_row)
-    ewx[i] <- ifelse(lx[i] > 0, sum(Lwx[i:num_row]) / lx[i], 0)
+    ewx[i] = sum(Lwx[i:num_row]) / lx[i]
   
   lf_df$qx  <- qx
   lf_df$lx  <- lx
@@ -191,17 +225,23 @@ RunLifeTable <- function(in_data, in_sex, in_mid_age, mx_trend = NA, scenario = 
 
 # ----- Run disease process -----
 ## Function to generate disease process for an age and sex cohort
-## Based on formulas in Barendregt JJ, Oortmarssen GJ, van, Vos T, Murray CJL. A generic model for the assessment of
-## disease epidemiology: the computational basis of DisMod II. Population Health Metrics.2003;1(1):4.
+## Based on formulas in Barendregt JJ, Oortmarssen GJ, van, Vos T, Murray CJL. 
+## A generic model for the assessment of disease epidemiology: the computational basis of DisMod II. 
+## Population Health Metrics.2003;1(1):4.
 
 RunDisease <- function(in_data,
                        in_sex,
                        in_mid_age,
                        in_disease,
-                       inc_trend    = NA,   # % annual change in incidence (compounding)
-                       cf_trend     = NA,   # % annual change in case fatality (compounding)
-                       scenario_inc = 0,    # one-off proportional reduction in incidence
-                       scenario_cf  = 0     # one-off proportional reduction in case fatality
+                       inc_trend       = NA,  # % annual change in incidence (compounding)
+                       cf_trend        = NA,  # % annual change in case fatality (compounding)
+                       rem_trend       = NA,  # % annual change in remission (compounding)
+                       inc_trend_years = NA,  # years to apply inc_trend (NA = no cap)
+                       cf_trend_years  = NA,  # years to apply cf_trend  (NA = no cap)
+                       rem_trend_years = NA,  # years to apply rem_trend (NA = no cap)
+                       scenario_inc    = 0,   # one-off proportional reduction in incidence
+                       scenario_cf     = 0,   # one-off proportional reduction in case fatality
+                       scenario_rem    = 0    # one-off proportional reduction in remission
 ) {
   
   # ── 1. Filter data to the requested sex and cohort entry age ───────────────
@@ -211,103 +251,99 @@ RunDisease <- function(in_data,
   num_rows <- nrow(in_data_f)
   
   # ── 2. Extract base disease rates from the data ────────────────────────────
-  incidence_base     <- in_data_f[[paste0("incidence_",     in_disease)]]
-  case_fatality_base <- in_data_f[[paste0("case_fatality_", in_disease)]]
   dw_disease         <- in_data_f[[paste0("dw_adj_",        in_disease)]]
-  pyld_rate          <- in_data_f$pyld_rate
+  incidence_disease  <- in_data_f[[paste0("incidence_",     in_disease)]]
+  case_fatality_base <- in_data_f[[paste0("case_fatality_", in_disease)]]
+  remission_base     <- in_data_f[[paste0("remission_",      in_disease)]]
+  remission_base[is.na(remission_base)] <- 0
   
-  # ── 3. Apply compounding trends (mirrors mx_trend in RunLifeTable) ─────────
-  # t = 1 at cohort entry → multiplier (1 − trend/100)^0 = 1 (no change)
-  # t = 2 one year later  → multiplier (1 − trend/100)^1, etc.
-  t_seq <- seq_len(num_rows) - 1L  # 0, 1, 2, ..., n−1
+  # ── 3. Apply compounding trends ─────────────────────────────────────────────
+  t_seq <- seq_len(num_rows) - 1L
   
   if (!is.na(inc_trend) && inc_trend != 0) {
-    incidence_disease <- incidence_base * (1 - inc_trend / 100) ^ t_seq
-  } else {
-    incidence_disease <- incidence_base
+    t_inc <- t_seq
+    if (!is.na(inc_trend_years)) t_inc <- pmin(t_inc, inc_trend_years)
+    incidence_disease <- incidence_disease * (1 - inc_trend / 100) ^ t_inc
   }
   
   if (!is.na(cf_trend) && cf_trend != 0) {
-    case_fatality_disease <- case_fatality_base * (1 - cf_trend / 100) ^ t_seq
-  } else {
-    case_fatality_disease <- case_fatality_base
+    t_cf <- t_seq
+    if (!is.na(cf_trend_years)) t_cf <- pmin(t_cf, cf_trend_years)
+    case_fatality_base <- case_fatality_base * (1 - cf_trend / 100) ^ t_cf
   }
   
-  # ── 4. Apply one-off scenario reductions ──────────────────────────────────
-  incidence_disease     <- incidence_disease     * (1 - scenario_inc)
-  case_fatality_disease <- case_fatality_disease * (1 - scenario_cf)
+  if (!is.na(rem_trend) && rem_trend != 0) {
+    t_rem <- t_seq
+    if (!is.na(rem_trend_years)) t_rem <- pmin(t_rem, rem_trend_years)
+    remission_base <- remission_base * (1 - rem_trend / 100) ^ t_rem
+  }
   
-  # ── 5. Initialise state vectors ───────────────────────────────────────────
-  # Starting cohort of 1,000 — all healthy at entry age
-  Sx <- numeric(num_rows)
-  Cx <- numeric(num_rows)
-  Dx <- numeric(num_rows)
+  # ── 4. Apply scenario reductions ────────────────────────────────────────────
+  incidence_disease    <- incidence_disease  * (1 - scenario_inc)
+  case_fatality_disease <- case_fatality_base * (1 - scenario_cf)
+  remission_disease    <- remission_base     * (1 - scenario_rem)
+  
+  # ── 5. Barendregt 1998 formulas with remission ────────────────────────────────
+  # lx = incidence + case_fatality + remission (total hazard leaving diseased state)
+  # qx = sqrt((incidence + remission - case_fatality)^2 + 4*incidence*remission)
+  lx <- incidence_disease + case_fatality_disease + remission_disease
+  qx <- sqrt((incidence_disease + remission_disease - case_fatality_disease)^2 + 
+             4 * incidence_disease * remission_disease)
+  wx <- exp(-1 * (lx + qx) / 2)
+  vx <- exp(-1 * (lx - qx) / 2)
+  
+  # ── 6. Initialise state vectors ───────────────────────────────────────────
+  number_of_ages <- num_rows
+  Sx <- Cx <- Dx <- Tx <- Ax <- PYx <- px <- mx <- rep(0, number_of_ages)
+  cfds <- case_fatality_disease
   
   Sx[1] <- 1000
-  Cx[1] <- 0
-  Dx[1] <- 0
+  Ax[1] <- 1000
   
-  # ── 6. Propagate the three-state disease model ────────────────────────────
-  # Based on Barendregt et al. (1998) and DisMod II (Barendregt et al. 2003)
-  # Within each 1-year interval, hazards are assumed constant.
-  #
-  #  Healthy → Diseased  governed by incidence hazard γ
-  #  Diseased → Dead     governed by case fatality hazard φ
-  #  Sx, Cx, Dx are proportions of 1,000
-  #
-  # The double-transition probability r_a (healthy → diseased → dead within
-  # the same year) follows Barendregt 1998 eq. 15:
-  #   r_a = [φ(1−e^{−γ}) − γ(1−e^{−φ})] / (φ − γ)  when γ ≠ φ
-  #   r_a = 1 − e^{−γ} − γ·e^{−γ}                   when γ = φ
-  
-  for (i in seq_len(num_rows - 1L)) {
-    gamma_i <- incidence_disease[i]
-    phi_i   <- case_fatality_disease[i]
-    
-    # Probability of incidence within the year
-    prob_inc <- 1 - exp(-gamma_i)
-    
-    # Double-transition probability (healthy → diseased → dead within 1 yr)
-    if (abs(phi_i - gamma_i) > 1e-10) {
-      r_a <- (phi_i * (1 - exp(-gamma_i)) - gamma_i * (1 - exp(-phi_i))) /
-        (phi_i - gamma_i)
+  # ── 7. Propagate three-state model using Barendregt 1998 ───────────────────
+  for (i in 2:(number_of_ages - 1)) {
+    if (qx[i - 1] > 0) {
+      vxmwx <- vx[i - 1] - wx[i - 1]
+      SxpCx <- Sx[i - 1] + Cx[i - 1]
+      dqx <- 2 * qx[i - 1]
+      qxmlx <- qx[i - 1] - lx[i - 1]
+      qxplx <- qx[i - 1] + lx[i - 1]
+      
+      Sx[i] <- Sx[i - 1] * (2 * vxmwx * cfds[i - 1] + 
+                            (vx[i - 1] * qxmlx + wx[i - 1] * qxplx)) / dqx
+      Cx[i] <- -1 * (vxmwx * (2 * (cfds[i - 1] * SxpCx - lx[i - 1] * Sx[i - 1]) - 
+                              Cx[i - 1] * lx[i - 1]) - 
+                     Cx[i - 1] * qx[i - 1] * (vx[i - 1] + wx[i - 1])) / dqx
+      Dx[i] <- (vxmwx * (2 * cfds[i - 1] * Cx[i - 1] - lx[i - 1] * SxpCx) - 
+                qx[i - 1] * SxpCx * (vx[i - 1] + wx[i - 1]) + 
+                dqx * (SxpCx + Dx[i - 1])) / dqx
     } else {
-      r_a <- 1 - exp(-gamma_i) - gamma_i * exp(-gamma_i)
+      Sx[i] <- Sx[i - 1]
+      Cx[i] <- Cx[i - 1]
+      Dx[i] <- Dx[i - 1]
     }
-    r_a <- max(r_a, 0)
-    
-    # Probability of dying from disease within the year (for current prevalent)
-    prob_cf <- 1 - exp(-phi_i)
-    
-    # Update states (following Barendregt 1998 eqs 16−18)
-    Sx[i + 1] <- Sx[i] * exp(-gamma_i)
-    Cx[i + 1] <- Sx[i] * (1 - exp(-gamma_i) - r_a) + Cx[i] * exp(-phi_i)
-    Dx[i + 1] <- Sx[i] * r_a + Cx[i] * (1 - exp(-phi_i)) + Dx[i]
   }
   
-  # Ensure non-negative states (rounding protection)
-  Sx <- pmax(Sx, 0)
-  Cx <- pmax(Cx, 0)
+  # GitHub leaves last element at initial 0 (no special handling needed)
+  # Sx, Cx, Dx were initialized to 0, so last element stays 0
   
-  Tx <- Sx + Cx + Dx  # should always equal 1,000
+  Tx   <- Sx + Cx + Dx
+  Ax <- Sx + Cx
   
-  # ── 7. Derive disease epidemiology outputs ────────────────────────────────
-  # Person-years at risk (half-cycle correction)
-  PYx <- 0.5 * (Sx + Cx + c(Sx[-1], Sx[num_rows]) + c(Cx[-1], Cx[num_rows]))
+  # ── 8. Derive PYx, px, mx ──────────────────────────────────────────────────
+  first_indices <- 1:(number_of_ages - 1)
+  last_indices <- 2:number_of_ages
+  PYx <- (Ax[first_indices] + Ax[last_indices]) / 2
+  mx[first_indices] <- (Dx[last_indices] - Dx[first_indices]) / PYx[first_indices]
+  mx[mx < 0] <- 0
+  px[first_indices] <- (Cx[last_indices] + Cx[first_indices]) / 2 / PYx[first_indices]
   
-  # Prevalence: proportion diseased among alive
-  alive <- Sx + Cx
-  px    <- ifelse(alive > 0, Cx / alive, 0)
+  # Pad px, mx, and PYx to match full length (add NA for last age)
+  px[number_of_ages] <- NA
+  mx[number_of_ages] <- NA
+  PYx[number_of_ages] <- NA
   
-  # Disease-specific mortality rate (deaths per person-year alive)
-  # Numerator: expected deaths from disease in interval
-  deaths_disease <- Cx * (1 - exp(-case_fatality_disease))
-  mx_disease     <- ifelse(PYx > 0, deaths_disease / PYx, 0)
-  
-  # Incidence numbers (cases per person-year among non-prevalent)
-  inc_num <- Sx * (1 - exp(-incidence_disease))
-  
-  # ── 8. Return as data frame ───────────────────────────────────────────────
+  # ── 9. Return as data frame ────────────────────────────────────────────────
   out <- data.frame(
     age                   = in_data_f$age,
     sex                   = in_sex,
@@ -318,10 +354,10 @@ RunDisease <- function(in_data,
     Tx                    = Tx,
     PYx                   = PYx,
     px                    = px,
-    mx                    = mx_disease,
-    inc_num               = inc_num,
+    mx                    = mx,
     incidence_disease     = incidence_disease,
     case_fatality_disease = case_fatality_disease,
+    remission_disease     = remission_disease,
     dw                    = dw_disease
   )
   
@@ -338,6 +374,9 @@ CalculationModel <- function(
     mx_trend       = NA,     # % annual change in all-cause mx (compounding)
     inc_trend      = NA,     # % annual change in disease incidence (compounding)
     cf_trend       = NA,     # % annual change in case fatality (compounding)
+    mx_trend_years  = NA,    # years to apply mx_trend  (NA = no cap)
+    inc_trend_years = NA,    # years to apply inc_trend (NA = no cap)
+    cf_trend_years  = NA,    # years to apply cf_trend  (NA = no cap)
     scenario       = 0,      # direct PIF on all-cause mx (like RunLifeTable)
     scenario_inc   = 0,      # scalar OR named vector of incidence PIFs per disease
     scenario_cf    = 0,      # scalar OR named vector of case-fatality PIFs per disease
@@ -378,11 +417,12 @@ CalculationModel <- function(
   
   # ── Step 1: Baseline general life table ───────────────────────────────────
   general_lt_bl <- RunLifeTable(
-    in_data    = in_data,
-    in_sex     = in_sex,
-    in_mid_age = in_mid_age,
-    mx_trend   = mx_trend,
-    scenario   = 0          # no direct scenario — baseline
+    in_data         = in_data,
+    in_sex          = in_sex,
+    in_mid_age      = in_mid_age,
+    mx_trend        = mx_trend,
+    mx_trend_years  = mx_trend_years,
+    scenario        = 0          # no direct scenario — baseline
   )
   message("Step 1 complete: baseline general life table")
   
@@ -396,8 +436,10 @@ CalculationModel <- function(
         in_disease   = dis,
         inc_trend    = inc_trend,
         cf_trend     = cf_trend,
+        rem_trend    = NA,
         scenario_inc = 0,
-        scenario_cf  = 0
+        scenario_cf  = 0,
+        scenario_rem = 0
       )
     }),
     in_disease
@@ -408,14 +450,18 @@ CalculationModel <- function(
   disease_lt_list_sc <- setNames(
     lapply(in_disease, function(dis) {
       RunDisease(
-        in_data      = in_data,
-        in_sex       = in_sex,
-        in_mid_age   = in_mid_age,
-        in_disease   = dis,
-        inc_trend    = inc_trend,
-        cf_trend     = cf_trend,
-        scenario_inc = sc_inc_vec[[dis]],   # disease-specific PIF (or shared scalar)
-        scenario_cf  = sc_cf_vec[[dis]]
+        in_data         = in_data,
+        in_sex          = in_sex,
+        in_mid_age      = in_mid_age,
+        in_disease      = dis,
+        inc_trend       = inc_trend,
+        cf_trend        = cf_trend,
+        rem_trend       = NA,
+        inc_trend_years = inc_trend_years,
+        cf_trend_years  = cf_trend_years,
+        scenario_inc    = sc_inc_vec[[dis]],   # disease-specific PIF (or shared scalar)
+        scenario_cf     = sc_cf_vec[[dis]],
+        scenario_rem    = 0
       ) %>%
         mutate(
           diff_mort_disease  = mx - disease_lt_list_bl[[dis]]$mx,
