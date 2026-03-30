@@ -361,6 +361,8 @@ Following the approach established in prior exercises, travel and background PA 
 # Join travel and background PA volume together
 mmets_pp_total <- mmets_pp |> 
   mutate(total_mmets = total_travel_mmets + work_ltpa_marg_met )
+
+write_csv(mmets_pp_total, "data/lecture_5_6/mmets_bogota.csv")
 ```
 
 ## Change the structure to `wide` format
