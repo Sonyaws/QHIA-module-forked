@@ -379,7 +379,7 @@ mmets_pp_total_wide <- mmets_pp_total |>
 
 head(mmets_pp_total_wide)
 
-write_csv(mmets_pp_total, "data/lecture_5_6/mmets_bogota.csv")
+write_csv(mmets_pp_total_wide, "data/lecture_5_6/mmets_bogota.csv")
 ```
 
 ## Distribution of Scenarios
