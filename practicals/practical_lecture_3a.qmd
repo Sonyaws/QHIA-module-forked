@@ -117,7 +117,81 @@ trip_dist |>
 
 The bus mode exhibits the highest share at `r round(trip_dist$bus * 100, 1)`(%), while the other category demonstrates the lowest share at `r round(trip_dist$other * 100, 1)`(%).
 
-## Trip distribution by distance categories
+::: {.callout-tip title="Quick Quiz" appearance="minimal"}
+
+### Question 1: Mode with Highest Share
+
+Based on the percentage distribution table above, which travel mode has the **highest share** of trips?
+
+```{ojs}
+//| echo: false
+viewof q1_mode_answer = Inputs.radio(
+  ["bus", "car", "pedestrian", "cycle", "motorcycle", "other"],
+  {
+    value: null,
+    label: html`<b></b>`,
+    format: x => ({
+      bus: "Bus",
+      car: "Car",
+      pedestrian: "Pedestrian",
+      cycle: "Cycle",
+      motorcycle: "Motorcycle",
+      other: "Other"
+    })[x]
+  }
+)
+```
+
+```{ojs}
+//| echo: false
+q1_mode_feedback = {
+  if (q1_mode_answer == null) return html`<i>Please select one option.</i>`;
+  return q1_mode_answer === "bus"
+    ? html`<span style="color: green; font-weight: bold;">Correct! The bus mode has the highest share of trips.</span>`
+    : html`<span style="color: red; font-weight: bold;">Incorrect. The correct answer is Bus - it has the highest share of trips.</span>`;
+}
+```
+
+::: {style="margin-top: 1rem;"}
+${q1_mode_feedback}
+:::
+
+---
+
+### Question 2: Combined Mode Share
+
+What is the **combined percentage share** of `bus` and `pedestrian` modes together? Enter the value rounded to one decimal place (e.g., 50.0).
+
+```{ojs}
+//| echo: false
+viewof q2_combined_input = Inputs.text({
+  value: "",
+  placeholder: "Enter percentage (e.g., 52.5)",
+  label: html`<b></b>`
+})
+```
+
+```{ojs}
+//| echo: false
+q2_combined_answer = 60.3;
+
+q2_combined_feedback = {
+  if (q2_combined_input.trim() === "") return html`<i>Please enter a value.</i>`;
+  const userValue = parseFloat(q2_combined_input);
+  if (isNaN(userValue)) return html`<span style="color: red;">Please enter a valid number.</span>`;
+  const isCorrect = Math.abs(userValue - q2_combined_answer) <= 0.1;
+  return isCorrect
+    ? html`<span style="color: green; font-weight: bold;">Correct! Bus (${q2_combined_answer}%) has the highest individual share.</span>`
+    : html`<span style="color: red; font-weight: bold;">Incorrect. The combined share of bus and pedestrian is approximately ${q2_combined_answer}%.</span>`;
+}
+```
+
+::: {style="margin-top: 1rem;"}
+${q2_combined_feedback}
+:::
+
+:::
+
 
 ### Distribution using Cumulative Distribution Function (CDF)
 
