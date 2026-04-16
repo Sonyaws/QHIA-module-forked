@@ -304,10 +304,9 @@ viewof q3_answer = Inputs.radio(
 //| echo: false
 q3_feedback = {
   if (q3_answer == null) return html`<i>Please select one option.</i>`;
-  const row = await db.sql`SELECT correct_id FROM quiz_answers WHERE question_id = 'q3'`;
-  return q3_answer === row.correct_id
-    ? html`<span style="color: green; font-weight: bold;">Correct!</span>`
-    : html`<span style="color: red; font-weight: bold;">Incorrect. Try again.</span>`;
+  return q3_answer === "b"
+    ? html`<span style="color: green; font-weight: bold;">Correct! The distance categories are 0-2km, 2-6km, and 6+km.</span>`
+    : html`<span style="color: red; font-weight: bold;">Incorrect. The correct answer is 0-2km, 2-6km, 6+km.</span>`;
 }
 ```
 
@@ -342,10 +341,9 @@ viewof q4_answer = Inputs.radio(
 //| echo: false
 q4_feedback = {
   if (q4_answer == null) return html`<i>Please select one option.</i>`;
-  const row = await db.sql`SELECT correct_id FROM quiz_answers WHERE question_id = 'q4'`;
-  return q4_answer === row.correct_id
-    ? html`<span style="color: green; font-weight: bold;">Correct!</span>`
-    : html`<span style="color: red; font-weight: bold;">Incorrect. Try again.</span>`;
+  return q4_answer === "b"
+    ? html`<span style="color: green; font-weight: bold;">Correct! The y-axis represents the proportion of trips.</span>`
+    : html`<span style="color: red; font-weight: bold;">Incorrect. The y-axis represents the proportion of trips.</span>`;
 }
 ```
 
@@ -540,10 +538,9 @@ viewof q5_answer = Inputs.radio(
 //| echo: false
 q5_feedback = {
   if (q5_answer == null) return html`<i>Please select one option.</i>`;
-  const row = await db.sql`SELECT correct_id FROM quiz_answers WHERE question_id = 'q5'`;
-  return q5_answer === row.correct_id
-    ? html`<span style="color: green; font-weight: bold;">Correct!</span>`
-    : html`<span style="color: red; font-weight: bold;">Incorrect. Try again.</span>`;
+  return q5_answer === "a"
+    ? html`<span style="color: green; font-weight: bold;">Correct! trips_ped_scen <- trips_baseline creates a copy of the baseline scenario.</span>`
+    : html`<span style="color: red; font-weight: bold;">Incorrect. The correct answer is trips_ped_scen <- trips_baseline.</span>`;
 }
 ```
 
@@ -598,10 +595,9 @@ viewof q6_answer = Inputs.radio(
 //| echo: false
 q6_feedback = {
   if (q6_answer == null) return html`<i>Please select one option.</i>`;
-  const row = await db.sql`SELECT correct_id FROM quiz_answers WHERE question_id = 'q6'`;
-  return q6_answer === row.correct_id
-    ? html`<span style="color: green; font-weight: bold;">Correct!</span>`
-    : html`<span style="color: red; font-weight: bold;">Incorrect. Try again.</span>`;
+  return q6_answer === "b"
+    ? html`<span style="color: green; font-weight: bold;">Correct! This converts only non-pedestrian trips in the 0-2km category to pedestrian mode.</span>`
+    : html`<span style="color: red; font-weight: bold;">Incorrect. The correct answer is: Converts only non-pedestrian trips in the 0-2km category to pedestrian mode.</span>`;
 }
 ```
 
@@ -650,10 +646,9 @@ viewof q7_answer = Inputs.radio(
 //| echo: false
 q7_feedback = {
   if (q7_answer == null) return html`<i>Please select one option.</i>`;
-  const row = await db.sql`SELECT correct_id FROM quiz_answers WHERE question_id = 'q7'`;
-  return q7_answer === row.correct_id
-    ? html`<span style="color: green; font-weight: bold;">Correct!</span>`
-    : html`<span style="color: red; font-weight: bold;">Incorrect. Try again.</span>`;
+  return q7_answer === "c"
+    ? html`<span style="color: green; font-weight: bold;">Correct! 5 km × 60 / 2.5 = 120 minutes.</span>`
+    : html`<span style="color: red; font-weight: bold;">Incorrect. The correct answer is 120 minutes (5 × 60 / 2.5 = 120).</span>`;
 }
 ```
 
@@ -729,10 +724,9 @@ viewof q8_answer = Inputs.radio(
 //| echo: false
 q8_feedback = {
   if (q8_answer == null) return html`<i>Please select one option.</i>`;
-  const row = await db.sql`SELECT correct_id FROM quiz_answers WHERE question_id = 'q8'`;
-  return q8_answer === row.correct_id
-    ? html`<span style="color: green; font-weight: bold;">Correct!</span>`
-    : html`<span style="color: red; font-weight: bold;">Incorrect. Try again.</span>`;
+  return q8_answer === "c"
+    ? html`<span style="color: green; font-weight: bold;">Correct! Cycle and Pedestrian are classified as active travel modes.</span>`
+    : html`<span style="color: red; font-weight: bold;">Incorrect. The correct answer is Cycle and Pedestrian.</span>`;
 }
 ```
 
@@ -790,10 +784,9 @@ viewof q9_answer = Inputs.radio(
 //| echo: false
 q9_feedback = {
   if (q9_answer == null) return html`<i>Please select one option.</i>`;
-  const row = await db.sql`SELECT correct_id FROM quiz_answers WHERE question_id = 'q9'`;
-  return q9_answer === row.correct_id
-    ? html`<span style="color: green; font-weight: bold;">Correct!</span>`
-    : html`<span style="color: red; font-weight: bold;">Incorrect. Try again.</span>`;
+  return q9_answer === "b"
+    ? html`<span style="color: green; font-weight: bold;">Correct! Cycling (5.8 mMET) has a higher mMET value than Walking (2.5 mMET).</span>`
+    : html`<span style="color: red; font-weight: bold;">Incorrect. The correct answer is Cycling (5.8 mMET).</span>`;
 }
 ```
 
