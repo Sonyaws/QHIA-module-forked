@@ -1,0 +1,436 @@
+---
+title: "Practical: Smoking-Attributable IHD Deaths in England, 2012–2023"
+author: "Belen Zapata-Diomedi"
+editor: visual
+toc: true
+lightbox: true
+format: 
+  html: 
+    theme: cosmos
+    embed-resources: true
+    toc: true
+    code-tools: true
+    code-fold: true
+    page-layout: full
+    df-print: paged
+    number-sections: true
+---
+
+# Learning objectives:
+
+This practical teaches you to:
+
+-   Calculate Population Impact Fractions (PIF) for binary exposures
+-   Apply PIFs to estimate attributable disease burden
+-   Compare observed vs counterfactual scenarios
+
+------------------------------------------------------------------------
+
+# Introduction
+
+This practical has two questions:
+
+> **Question 1.** What is the burden of smoking-attributable IHD mortality for males and females aged 50–59 in England, from 2012 to 2023?
+
+> **Question 2.** How many IHD deaths could have been prevented under a scenario of accelerated smoking decline in 2023?
+
+You will use the **Population Impact Fraction (PIF)** formula for a binary exposure (smoker vs non-smoker):
+
+$$PIF = \frac{\sum_i p_i RR_i \;-\; \sum_i p_i^* RR_i}{\sum_i p_i RR_i}$$
+
+Where: - $p_i$ = observed prevalence of exposure category $i$ - $p_i^*$ = counterfactual prevalence (no exposure) - $RR_i$ = relative risk for exposure category $i$
+
+------------------------------------------------------------------------
+
+# Data
+
+## Smoking prevalence
+
+Cigarette smokers (%) in 50–59 year olds, England.\
+Source: ONS Opinions and Lifestyle Survey, 2024.
+
+```{r data-smoking}
+smoking <- data.frame(
+  year       = 2012:2023,
+  prev_men   = c(21.9, 19.2, 18.4, 17.1, 15.9, 19.1, 14.7, 19.7, 16.3, 15.9, 17.7, 15.4),
+  prev_women = c(17.4, 18.0, 17.3, 15.2, 13.2, 14.9, 15.9, 14.0, 15.6, 13.3, 12.2, 12.6)
+)
+
+smoking$p_men   <- smoking$prev_men   / 100
+smoking$p_women <- smoking$prev_women / 100
+
+smoking[, c("year", "prev_men", "prev_women")]
+```
+
+## IHD deaths
+
+IHD deaths, England, ages 50–59 (50–54 + 55–59 summed), by sex.\
+Source: GBD 2023 Results Tool (IHME).
+
+```{r data-ihd}
+ihd <- data.frame(
+  year         = 2012:2023,
+  deaths_men   = c(2884, 2914, 2855, 2915, 2948, 3033, 3131, 3173, 3477, 3568, 3632, 3882),
+  deaths_women = c( 683,  713,  694,  724,  731,  740,  761,  774,  814,  853,  900,  959)
+)
+
+ihd
+```
+
+## Relative risks
+
+Current smoker vs non-smoker, IHD, ages 45–59.\
+Source: Ezzati et al., *Circulation* (2003), CPS-II reanalysis.
+
+```{r data-rr}
+RR_men   <- 3.04
+RR_women <- 3.78
+
+cat("Relative Risks (smoker vs non-smoker):\n")
+cat("  RR for men:   ", RR_men, "\n")
+cat("  RR for women: ", RR_women, "\n")
+```
+
+------------------------------------------------------------------------
+
+# Question 1 — Burden of smoking-attributable IHD mortality
+
+## Step 1: Calculate the PIF for each year
+
+The PIF formula for binary exposure is:
+
+$$PIF = \frac{p_{smoker} \times RR_{smoker} + p_{non-smoker} \times RR_{non-smoker} - p^*_{smoker} \times RR_{smoker} - p^*_{non-smoker} \times RR_{non-smoker}}{p_{smoker} \times RR_{smoker} + p_{non-smoker} \times RR_{non-smoker}}$$
+
+In R code:
+
+``` r
+# p_star is the counterfactual: no one smokes
+p_star <- c(0, 1)  # p_smoker = 0, p_non-smoker = 1
+
+# PIF = (sum(p × RR) - sum(p_star × RR)) / sum(p × RR)
+PIF <- (sum(p * RR) - sum(p_star * RR)) / sum(p * RR)
+```
+
+Run the code below to calculate PIFs for all years:
+
+```{r q1-pif}
+p_star <- c(0, 1) # Represents counterfactual with 0% smoking and 100% not smoking
+
+results <- data.frame(
+  year       = 2012:2023,
+  PIF_men    = NA_real_,
+  PIF_women  = NA_real_,
+  attr_men   = NA_real_,
+  attr_women = NA_real_
+)
+
+for (i in 1:nrow(results)) {
+  
+  p_men_obs   <- c(smoking$p_men[i],   1 - smoking$p_men[i])
+  p_women_obs <- c(smoking$p_women[i], 1 - smoking$p_women[i])
+  
+  RR_men_vec   <- c(RR_men,   1)
+  RR_women_vec <- c(RR_women, 1)
+  
+  results$PIF_men[i]   <- (sum(p_men_obs * RR_men_vec) - sum(p_star * RR_men_vec)) / sum(p_men_obs * RR_men_vec)
+  results$PIF_women[i] <- (sum(p_women_obs * RR_women_vec) - sum(p_star * RR_women_vec)) / sum(p_women_obs * RR_women_vec)
+  
+  results$attr_men[i]   <- results$PIF_men[i]   * ihd$deaths_men[i]
+  results$attr_women[i] <- results$PIF_women[i] * ihd$deaths_women[i]
+}
+
+results$PIF_men    <- round(results$PIF_men   * 100, 1)
+results$PIF_women  <- round(results$PIF_women * 100, 1)
+results$attr_men   <- round(results$attr_men)
+results$attr_women <- round(results$attr_women)
+results$attr_total <- results$attr_men + results$attr_women
+
+results
+```
+
+::::: {.callout-tip title="Quick Quiz" appearance="minimal"}
+### Question 1.1: PIF for Men in 2023
+
+Based on the results table above, what is the PIF (percentage) for **men** in 2023?
+
+```{ojs}
+//| echo: false
+viewof q1_1_answer = Inputs.text({
+  value: "",
+  placeholder: "Enter percentage (e.g., 28.5)",
+  label: html`<b></b>`
+})
+
+q1_1_correct = 23.9;
+
+q1_1_feedback = {
+  if (q1_1_answer.trim() === "") return html`<i>Please enter a value.</i>`;
+  const userValue = parseFloat(q1_1_answer);
+  if (isNaN(userValue)) return html`<span style="color: red;">Please enter a valid number.</span>`;
+  const isCorrect = Math.abs(userValue - q1_1_correct) <= 1;
+  return isCorrect
+    ? html`<span style="color: green; font-weight: bold;">Correct! The PIF for men in 2023 is approximately 23.9%.</span>`
+    : html`<span style="color: red; font-weight: bold;">Incorrect. Try again — look at the PIF_men column for 2023.</span>`;
+}
+```
+
+::: {style="margin-top: 1rem;"}
+\${q1_1_feedback}
+:::
+
+### Question 1.2: Total Attributable Deaths in 2023
+
+How many **total** attributable IHD deaths (men + women) were there in 2023?
+
+```{ojs}
+//| echo: false
+viewof q1_2_answer = Inputs.text({
+  value: "",
+  placeholder: "Enter number (e.g., 1200)",
+  label: html`<b></b>`
+})
+
+q1_2_correct = 928;
+
+q1_2_feedback = {
+  if (q1_2_answer.trim() === "") return html`<i>Please enter a value.</i>`;
+  const userValue = parseFloat(q1_2_answer);
+  if (isNaN(userValue)) return html`<span style="color: red;">Please enter a valid number.</span>`;
+  const isCorrect = Math.abs(userValue - q1_2_correct) <= 20;
+  return isCorrect
+    ? html`<span style="color: green; font-weight: bold;">Correct!</span>`
+    : html`<span style="color: red; font-weight: bold;">Incorrect. Sum attr_men and attr_women for 2023.</span>`;
+}
+```
+
+::: {style="margin-top: 1rem;"}
+\${q1_2_feedback}
+:::
+:::::
+
+## Step 2: Plot attributable deaths over time
+
+```{r q1-plot, fig.width=8, fig.height=5}
+plot(results$year, results$attr_men,
+     type = "b", pch = 16, lwd = 2, col = "#1E3A5F",
+     ylim = c(0, 1400),
+     xlab = "Year",
+     ylab = "Smoking-attributable IHD deaths",
+     main = "Smoking-attributable IHD deaths, ages 50–59, England")
+
+lines(results$year, results$attr_women,
+      type = "b", pch = 17, lwd = 2, lty = 2, col = "#2A9D8F")
+
+lines(results$year, results$attr_total,
+      type = "b", pch = 15, lwd = 2, lty = 3, col = "#E76F51")
+
+legend("topleft",
+       legend = c("Men", "Women", "Total"),
+       col    = c("#1E3A5F", "#2A9D8F", "#E76F51"),
+       lwd = 2, lty = c(1, 2, 3), pch = c(16, 17, 15), bty = "n")
+```
+
+:::: {.callout-tip title="Quick Quiz" appearance="minimal"}
+### Question 1.3: Trend Observation
+
+Looking at the plot, what happened to total attributable IHD deaths between 2012 and 2023?
+
+```{ojs}
+//| echo: false
+viewof q1_3_answer = Inputs.radio(
+  ["They increased", "They decreased", "They stayed the same"],
+  {
+    value: null,
+    label: html`<b></b>`
+  }
+)
+
+q1_3_feedback = {
+  if (q1_3_answer == null) return html`<i>Please select one option.</i>`;
+  return q1_3_answer === "They stayed the same"
+    ? html`<span style="color: green; font-weight: bold;">Correct! Despite smoking prevalence falling, total attributable deaths stayed approximatly the same because total IHD deaths increased.</span>`
+    : html`<span style="color: red; font-weight: bold;">Incorrect. Look at the trend line for Total.</span>`;
+}
+```
+
+::: {style="margin-top: 1rem;"}
+\${q1_3_feedback}
+:::
+::::
+
+> **Q1.1** Smoking prevalence fell between 2012 and 2023 for both sexes. Yet total attributable IHD deaths increased. Explain why (based on the data in this practical).
+
+> **Q1.2** Women have a higher RR (3.78) than men (3.04), yet fewer attributable deaths in every year. What drives this difference?
+
+> **Q1.3** Calculate the cumulative total of attributable IHD deaths across all 12 years. What does this figure represent, and what assumptions does it rest on?
+
+------------------------------------------------------------------------
+
+# Question 2 — Prevented deaths under accelerated decline: scenario analysis
+
+## The scenario
+
+Smoking prevalence in England has declined since 2012, but what if it had declined *twice as fast*? The scenario sets the **counterfactual 2023 prevalence** to half the **observed 2012 prevalence**:
+
+|       | Observed 2012 | Observed 2023 | **Scenario 2023** |
+|-------|---------------|---------------|-------------------|
+| Men   | 21.9%         | 15.4%         | **10.95%**        |
+| Women | 17.4%         | 12.6%         | **8.70%**         |
+
+In the PIF formula: $p$ remains the *observed 2023 distribution*; $p^*$ becomes the *scenario distribution*. The PIF then measures the fraction of deaths that would have been prevented in 2023 at a lower prevalence of smoking.
+
+## Step 3: Calculate prevented deaths for 2023
+
+Run the code below to calculate deaths prevented under the accelerated decline scenario:
+
+```{r q2-scenario}
+p_men_2023   <- smoking$p_men[smoking$year   == 2023]
+p_women_2023 <- smoking$p_women[smoking$year == 2023]
+
+p_men_cf   <- smoking$p_men[smoking$year   == 2012] / 2
+p_women_cf <- smoking$p_women[smoking$year == 2012] / 2
+
+deaths_men_2023   <- ihd$deaths_men[ihd$year   == 2023]
+deaths_women_2023 <- ihd$deaths_women[ihd$year == 2023]
+
+p_obs_men   <- c(p_men_2023,   1 - p_men_2023)
+p_obs_women <- c(p_women_2023, 1 - p_women_2023)
+
+p_cf_men   <- c(p_men_cf,   1 - p_men_cf)
+p_cf_women <- c(p_women_cf, 1 - p_women_cf)
+
+RR_men_vec   <- c(RR_men,   1)
+RR_women_vec <- c(RR_women, 1)
+
+PIF_men_scenario   <- (sum(p_obs_men * RR_men_vec) - sum(p_cf_men * RR_men_vec)) / sum(p_obs_men * RR_men_vec)
+PIF_women_scenario <- (sum(p_obs_women * RR_women_vec) - sum(p_cf_women * RR_women_vec)) / sum(p_obs_women * RR_women_vec)
+
+attr_men_scenario   <- round(PIF_men_scenario   * deaths_men_2023)
+attr_women_scenario <- round(PIF_women_scenario * deaths_women_2023)
+
+attr_men_2023   <- results$attr_men[results$year   == 2023]
+attr_women_2023 <- results$attr_women[results$year == 2023]
+
+prevented_men   <- attr_men_2023   - attr_men_scenario
+prevented_women <- attr_women_2023 - attr_women_scenario
+
+cat("--- 2023 results ---\n")
+cat("Attributable deaths (observed prevalence) — Men:", attr_men_2023,     " Women:", attr_women_2023,     "\n")
+cat("Attributable deaths (scenario prevalence) — Men:", attr_men_scenario, " Women:", attr_women_scenario, "\n")
+cat("Deaths prevented                            — Men:", prevented_men,       " Women:", prevented_women,       "\n")
+```
+
+::::: {.callout-tip title="Quick Quiz" appearance="minimal"}
+### Question 2.1: Total Deaths Prevented
+
+Under the accelerated decline scenario, how many **total** IHD deaths were prevented in 2023?
+
+```{ojs}
+//| echo: false
+viewof q2_1_answer = Inputs.text({
+  value: "",
+  placeholder: "Enter number (e.g., 250)",
+  label: html`<b></b>`
+})
+
+q2_1_correct = 832;
+
+q2_1_feedback = {
+  if (q2_1_answer.trim() === "") return html`<i>Please enter a value.</i>`;
+  const userValue = parseFloat(q2_1_answer);
+  if (isNaN(userValue)) return html`<span style="color: red;">Please enter a valid number.</span>`;
+  const isCorrect = Math.abs(userValue - q2_1_correct) <= 20;
+  return isCorrect
+    ? html`<span style="color: green; font-weight: bold;">Correct! Approximately 832 deaths were prevented.</span>`
+    : html`<span style="color: red; font-weight: bold;">Incorrect. Look at the "Total prevented" line in the output.</span>`;
+}
+```
+
+::: {style="margin-top: 1rem;"}
+\${q2_1_feedback}
+:::
+
+### Question 2.2: PIF Interpretation
+
+A **higher PIF** means:
+
+```{ojs}
+//| echo: false
+viewof q2_2_answer = Inputs.radio(
+  [
+    "A larger fraction of deaths are attributable to smoking",
+    "Fewer people smoke",
+    "The relative risk is lower",
+    "More people survived"
+  ],
+  {
+    value: null,
+    label: html`<b></b>`
+  }
+)
+
+q2_2_feedback = {
+  if (q2_2_answer == null) return html`<i>Please select one option.</i>`;
+  return q2_2_answer === "A larger fraction of deaths are attributable to smoking"
+    ? html`<span style="color: green; font-weight: bold;">Correct! PIF represents the proportion of disease burden attributable to the exposure.</span>`
+    : html`<span style="color: red; font-weight: bold;">Incorrect. Think about what PIF measures.</span>`;
+}
+```
+
+::: {style="margin-top: 1rem;"}
+\${q2_2_feedback}
+:::
+:::::
+
+## Step 4: Plot observed vs scenario
+
+```{r q2-plot, fig.width=7, fig.height=5}
+heights <- c(attr_men_2023, attr_men_scenario, attr_women_2023, attr_women_scenario)
+cols    <- c("#1E3A5F", "#7BA7C7", "#2A9D8F", "#8FD4CA")
+labels  <- c("Men\n(observed)", "Men\n(scenario)", "Women\n(observed)", "Women\n(scenario)")
+
+bp <- barplot(heights,
+              names.arg = labels,
+              col = cols, border = NA,
+              ylab = "Smoking-attributable IHD deaths",
+              main = "Observed vs. accelerated-decline scenario, 2023\nEngland, ages 50–59",
+              ylim = c(0, max(heights) * 1.25))
+
+text(x = bp, y = heights + 15, labels = heights, cex = 0.9)
+```
+
+> **Q2.1** How many IHD deaths would have been prevented in 2023 if smoking had declined twice as fast since 2012? Express this as a percentage of total IHD deaths in this age group in 2023.
+
+> **Q2.2** In the scenario, $p^*$ is set to the counterfactual prevalence. Those who "stop smoking" under the scenario are treated as equivalent to non-smokers (RR = 1). Is this realistic? In which direction does it bias the prevented-deaths estimate?
+
+> **Q2.3** Name one other factor that changed between 2012 and 2023 that this analysis does not account for.
+
+------------------------------------------------------------------------
+
+# Summary
+
+::: {.callout-tip title="Key Concepts" appearance="minimal"}
+### Population Impact Fraction (PIF)
+
+The fraction of disease that could be prevented if the exposure were eliminated.
+
+### Binary Exposure
+
+Exposure has two categories (e.g., smoker/non-smoker). The PIF formula compares observed exposure distribution to a counterfactual (e.g., no exposure).
+
+### Attributable Deaths
+
+Deaths attributable to the exposure = PIF × total deaths
+
+### Counterfactual
+
+The hypothetical scenario with reduced or eliminated exposure. In Question 2, this is "half the 2012 smoking prevalence."
+:::
+
+------------------------------------------------------------------------
+
+# References
+
+1.  Office for National Statistics. *Adult Smoking Habits in England, 2024.* Newport: ONS; 2025.
+2.  GBD 2023 Causes of Death Collaborators. *Global Burden of Disease Study 2023.* Seattle: IHME; 2024.
+3.  Ezzati M, Lopez AD, Rodgers A, Vander Hoorn S, Murray CJL. Selected major risk factors and global and regional burden of disease. *Lancet.* 2002;360(9343):1347–1360.
