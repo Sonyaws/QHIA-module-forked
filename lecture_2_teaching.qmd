@@ -82,7 +82,7 @@ Murray CJ et al. (2003). Comparative quantification of health risks. *Population
 
 ------------------------------------------------------------------------
 
-# PIF — Binary Exposure {#sec-pif-binary}
+# PIF — One category of exposed {#sec-pif-one-category}
 
 The **Population Impact Fraction (PIF)** generalises PAF. While PAF compares current exposure to *zero* exposure, the PIF compares current exposure to any counterfactual — including realistic, policy-relevant scenarios.
 
@@ -96,7 +96,7 @@ where $p$ = baseline prevalence, $p^*$ = counterfactual prevalence, $RR$ = relat
 Prevalence of inactivity reduced from 50% to 40% by an intervention.
 
 ```{r}
-#| label: pif-binary
+#| label: pif-one category
 
 # --- Inputs ---
 p    <- 0.50   # Prevalence of inactivity at baseline
@@ -140,7 +140,7 @@ where $p_i$ and $p^*_i$ are the baseline and counterfactual proportions in categ
 Two counterfactuals are computed:
 
 1.  **Scenario (PIF):** Inactive population shifts toward more active categories — a realistic policy target.\
-2.  **Burden of disease (PAF):** Everyone reaches the highest activity level (TMREL — theoretical minimum risk exposure level).
+2.  **Burden of disease (PAF):** Everyone reaches the highest activity level.
 
 ```{r}
 #| label: pif-categorical
@@ -154,7 +154,7 @@ P_base <- c(Inactive = 0.17, Low = 0.24, Moderate = 0.31, High = 0.28)
 # Counterfactual 1: Intervention scenario (inactive shifts to low/moderate)
 P_cf_scenario <- c(Inactive = 0.10, Low = 0.27, Moderate = 0.35, High = 0.28)
 
-# Counterfactual 2: Burden of disease — everyone highly active (TMREL)
+# Counterfactual 2: Burden of disease — everyone highly active
 P_cf_tmrel    <- c(Inactive = 0.00, Low = 0.00, Moderate = 0.00, High = 1.00)
 
 # Baseline IHD deaths (males 30–34)
@@ -179,10 +179,10 @@ cat("Sum counterfactual:", round(sum_scenario, 4), "\n")
 cat("PIF =", round(PIF_scenario, 4), "\n")
 cat("PIF (%) =", round(PIF_scenario * 100, 2), "%\n\n")
 
-# ── PIF 2 (= PAF): Everyone highly active (TMREL) ───────────────────────────────
+# ── PIF 2 (= PAF): Everyone highly active  ───────────────────────────────
 PAF_tmrel <- (sum_base - sum_tmrel) / sum_base
 
-cat("── PIF 2 / PAF: Everyone highly active (TMREL) ───────\n")
+cat("── PIF 2 / PAF: Everyone highly active  ───────\n")
 cat("Sum baseline:      ", round(sum_base,  4), "\n")
 cat("Sum counterfactual:", round(sum_tmrel, 4), "\n")
 cat("PAF =", round(PAF_tmrel, 4), "\n")
