@@ -190,7 +190,7 @@ viewof q1_2_answer = Inputs.text({
   label: html`<b></b>`
 })
 
-q1_2_correct = 928;
+q1_2_correct = 1177;
 
 q1_2_feedback = {
   if (q1_2_answer.trim() === "") return html`<i>Please enter a value.</i>`;
