@@ -3,7 +3,8 @@ title: "Practicals: lecture 3"
 subtitle: "Scenarios and Health Impact Assessment (HIA)"
 author: "Ali Abbas"
 editor: visual
-date: 28/04/2026
+date: 04/28/2026
+date-format: long
 toc: true
 lightbox: true
 format: 
