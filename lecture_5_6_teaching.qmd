@@ -27,7 +27,8 @@ editor:
 
 # Data and Functions {#sec-data}
 
-Here we load the libraries, source the helper functions, and read all required data.
+Here we load the libraries, source the helper functions, and read all
+required data.
 
 ```{r}
 #| label: libraries-and-functions
@@ -72,13 +73,15 @@ glimpse(mslt_general)
 
 ## Bogotá population data {#sec-bogota-data}
 
-This file contains the Bogotá study population with marginal MET-hours baseline and pedestrian scenario created in lecture 3 and saved in lecture_5_6 data. 
+This file contains the Bogotá study population with marginal MET-hours
+baseline and pedestrian scenario created in lecture 3 and saved in
+lecture_5_6 data.
 
 ```{r}
 #| label: load-bogota
 
-io <- readRDS("data/lecture_3/ithim_io/io.rds") ### REPLACE after ALI fixes. 
-base_pop <- io$bogota$base_pop
+
+base_pop <- read_csv("data/lecture_5_6/base_pop.csv")
 travel_mmets <- read_csv("data/lecture_5_6/mmets_bogota.csv")
 
 bogota_mmets <- travel_mmets %>%
@@ -112,7 +115,7 @@ age) at the same time and follows them as they age and die. Each row
 represents one year of age.
 
 | Variable    | Meaning                                                      |
-|----------------|--------------------------------------------------------|
+|------------------|------------------------------------------------------|
 | `mx`        | All-cause mortality *rate* at age x (deaths per person-year) |
 | `qx`        | Probability of dying between age x and x+1                   |
 | `lx`        | Number of survivors at age x                                 |
@@ -251,6 +254,7 @@ cat(sprintf("Difference in person-years lived (Lx):           %s\n",
             format(round(gain_ly_trend),  big.mark = ",")))
 cat(sprintf("Difference in health-adjusted life years (Lwx):  %s\n",
             format(round(gain_hly_trend), big.mark = ",")))
+
 cat(sprintf("Difference in life expectancy:                   %.1f days (%.2f years)\n",
             gain_ex_trend, gain_ex_trend / 365))
 ```
@@ -321,14 +325,14 @@ tibble(
 A 0.5% annual compound reduction in all-cause mortality adds
 approximately `r format(round(gain_ly_trend), big.mark = ",")`
 person-years to this cohort over their remaining lifetime and increases
-life expectancy by about `r round(gain_ex_trend)` days. 
+life expectancy by about `r round(gain_ex_trend)` days.
 :::
 
 ::: callout-note
 ## Extending this
 
 `mx_trend` can also be **negative** to model worsening mortality (e.g.
-`mx_trend = -1` for a 1% annual increase). 
+`mx_trend = -1` for a 1% annual increase).
 :::
 
 ------------------------------------------------------------------------
@@ -457,7 +461,7 @@ what would happen in the future under a counterfactual.
 
 ------------------------------------------------------------------------
 
----
+------------------------------------------------------------------------
 
 ## Example 2 — Physical Activity Increase (Bogotá) {#sec-scenario2}
 
@@ -679,10 +683,10 @@ Healthy (Sx) --incidence--> Diseased (Cx) --case fatality--> Dead from disease (
               <--remission--
 ```
 
-At cohort entry, some individuals may already have the disease based on 
-prevalence data from GBD. The model initializes with $C_x$ people diseased 
-and $S_x = 1000 - C_x$ healthy, then the constraint $S_x + C_x + D_x = 1{,}000$ 
-holds at every subsequent age.
+At cohort entry, some individuals may already have the disease based on
+prevalence data from GBD. The model initializes with $C_x$ people
+diseased and $S_x = 1000 - C_x$ healthy, then the constraint
+$S_x + C_x + D_x = 1{,}000$ holds at every subsequent age.
 
 `RunDisease()` implements this process. It accepts the same `inc_trend`
 and `cf_trend` scalar parameters as `RunLifeTable()` accepts `mx_trend`
@@ -838,7 +842,6 @@ dis_sc5_dmt2 <- RunDisease(
 ) %>% mutate(label = "5% incidence reduction")
 ```
 
-
 ```{r}
 #| label: plot-disease-scenario-5pct
 #| fig-cap: "IHD, COPD and DMT2 incidence rates: reference vs 5% one-off reduction. The gap between curves is constant across ages (unlike a trend, which accumulates)."
@@ -893,11 +896,13 @@ ggplot(dis_all_sc5, aes(x = age, y = mx, colour = disease, linetype = label)) +
 
 `scenario_inc = 0.05` in `RunDisease()` reduces incidence by 5% at every
 age. The full effect on life years only materialises inside
-`CalculationModel()`, which propagates the disease mortality and disability reduction into the general life table. The disease table alone shows you the
-epidemiological change; the MSLT shows you the life-years consequence.
+`CalculationModel()`, which propagates the disease mortality and
+disability reduction into the general life table. The disease table
+alone shows you the epidemiological change; the MSLT shows you the
+life-years consequence.
 :::
 
----
+------------------------------------------------------------------------
 
 ## Complete MSLT — Physical Activity and Diseases {#sec-mslt}
 
@@ -909,20 +914,21 @@ combines:
 2.  **Disease sections** for each modelled condition (from
     `RunDisease()`)
 3.  **Feedback**: disease-specific mortality from step 2 modifies total
-    `mx`  in step 1 and alternatively `mx` is modified directly by the PIF 
+    `mx` in step 1 and alternatively `mx` is modified directly by the
+    PIF
 
 `CalculationModel()` runs all three components simultaneously and
 returns differences (scenario − reference) in life years,
 health-adjusted life years, and disease-specific incidence and
 mortality.
 
----
+------------------------------------------------------------------------
 
 ## Example 1 — PA scenario with disease-specific PIFs {#sec-mslt-pa}
 
 **Question:** What is the gain in life years and health-adjusted life
-years from PA increase from the Pedestrian scenario, modelled through disease-specific
-incidence reductions for IHD and type 2 diabetes?
+years from PA increase from the Pedestrian scenario, modelled through
+disease-specific incidence reductions for IHD and type 2 diabetes?
 
 The pathway is:
 
@@ -982,7 +988,10 @@ print(pifs_inc  %>% arrange(disease, sex, age_cat), n = Inf)
 
 ### Step 3 — Run the complete MSLT {#sec-mslt-run}
 
-First, assess whether the model is working properly. It is expected that without an interventions or difference in trends the model should produce zero outputs since it compares exactly the same sets of MSLTs for the same population cohort. 
+First, assess whether the model is working properly. It is expected that
+without an interventions or difference in trends the model should
+produce zero outputs since it compares exactly the same sets of MSLTs
+for the same population cohort.
 
 ```{r}
 #| label: mslt-validation
@@ -1007,7 +1016,9 @@ cat(sprintf("  sum(inc_num_diff_ishd):    %.6f\n", sum(output_test$inc_num_diff_
 cat(sprintf("  sum(inc_num_diff_copd):    %.6f\n", sum(output_test$inc_num_diff_copd)))
 cat(sprintf("  sum(inc_num_diff_dmt2):    %.6f\n", sum(output_test$inc_num_diff_dmt2)))
 ```
-Second, assess whether the modeled prevalence and mortality aligns with the input data for the selected diseases. 
+
+Second, assess whether the modeled prevalence and mortality aligns with
+the input data for the selected diseases.
 
 ```{r}
 #| label: mslt-gbd-comparison-validation
@@ -1426,8 +1437,10 @@ for (sex_i in c("female", "male")) {
 
 ## Comparison with CRA approach {#sec-cra-comparison}
 
-A Comparative Risk Assessment (CRA) applies PIFs directly to baseline burden
-without the multi-state life table dynamics. It estimates effects at a single point in time (year 1), while MSLT captures effects over the full lifetime.
+A Comparative Risk Assessment (CRA) applies PIFs directly to baseline
+burden without the multi-state life table dynamics. It estimates effects
+at a single point in time (year 1), while MSLT captures effects over the
+full lifetime.
 
 ```{r}
 #| label: cra-comparison
@@ -1488,6 +1501,7 @@ tibble(
   knitr::kable(booktabs = TRUE, align = "lccc", caption = "CRA vs MSLT: Year 1 and lifetime effects")
 ```
 
-- **CRA**: deaths prevented in year 1 × remaining life expectancy = lifetime life years
-- **MSLT (disease mx)**: incidence ↓ → disease mx ↓ → total mx ↓  
-- **MSLT (direct PIF)**: same incidence changes; mx × (1 − pif_acm)
+-   **CRA**: deaths prevented in year 1 × remaining life expectancy =
+    lifetime life years
+-   **MSLT (disease mx)**: incidence ↓ → disease mx ↓ → total mx ↓\
+-   **MSLT (direct PIF)**: same incidence changes; mx × (1 − pif_acm)
